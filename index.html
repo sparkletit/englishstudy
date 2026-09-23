@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>英语音节划分器 · 音节点读</title>
+<style>
+  :root{
+    --red:#d32f2f; --ink:#1a1a1a; --muted:#64748b; --blue:#3b82f6;
+    --card:#ffffff; --line:#e2e8f0; --bg1:#eef2f9; --bg2:#e0e9f5;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+    background:linear-gradient(180deg,var(--bg1),var(--bg2));
+    min-height:100vh; color:var(--ink);
+    display:flex; justify-content:center;
+    padding:max(12px, env(safe-area-inset-top)) 12px 40px;
+  }
+  .app{width:100%; max-width:520px;}
+
+  header{text-align:center; margin:10px 0 18px;}
+  header h1{font-size:26px; margin:0 0 4px; letter-spacing:1px;}
+  header p{margin:0; color:var(--muted); font-size:14px;}
+
+  .search{display:flex; gap:8px; margin-bottom:10px;}
+  .search input{
+    flex:1; font-size:20px; padding:12px 14px; border:2px solid var(--line);
+    border-radius:14px; outline:none; background:var(--card); min-width:0;
+  }
+  .search input:focus{border-color:var(--blue);}
+  .search button{
+    font-size:17px; padding:0 18px; border:none; border-radius:14px;
+    background:var(--blue); color:#fff; font-weight:600; cursor:pointer;
+  }
+  .search button:active{transform:scale(.96);}
+
+  .samples{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;}
+  .samples button{
+    font-size:14px; padding:5px 12px; border-radius:999px; border:1px solid var(--line);
+    background:var(--card); color:var(--muted); cursor:pointer;
+  }
+  .samples button:active{background:#dbeafe;}
+
+  .stage{
+    background:var(--card); border-radius:20px; padding:26px 14px 20px;
+    box-shadow:0 6px 24px rgba(30,60,110,.08); text-align:center; min-height:150px;
+    display:flex; flex-direction:column; justify-content:center; gap:14px;
+  }
+  .hint{color:var(--muted); font-size:14px;}
+
+  #wordWhole{font-size:46px; font-weight:800; line-height:1.25; letter-spacing:2px;
+    cursor:pointer; user-select:none; padding:6px 4px; word-break:break-all;}
+  #wordWhole .v{color:var(--red);}
+  #wordWhole .silent{color:#b8c2cf;}
+  #wordWhole:active{opacity:.6;}
+
+  #sylWrap{display:flex; flex-wrap:wrap; justify-content:center; align-items:stretch;}
+  .syl{
+    background:#f8fafc; border:2px solid var(--line); border-radius:16px;
+    padding:10px 12px 8px; margin:4px 3px; cursor:pointer; min-width:60px;
+    transition:transform .15s, border-color .15s, background .15s;
+    animation:pop .3s both;
+  }
+  @keyframes pop{from{transform:scale(.7);opacity:0}to{transform:scale(1);opacity:1}}
+  .syl:active{transform:scale(.94);}
+  .syl.playing{border-color:var(--blue); background:#eff6ff;}
+  .syl.stress{border-color:#fecaca; background:#fff8f8;}
+  .syl .txt{font-size:38px; font-weight:800; line-height:1.2;}
+  .syl .txt .v{color:var(--red);}
+  .syl .txt .silent{color:#b8c2cf;}
+  .syl .ipa{margin-top:4px; font-size:20px; color:#334155; font-family:"Segoe UI","Times New Roman",serif;}
+  .syl .ipa .mark{color:var(--red); font-weight:700; margin-right:1px;}
+  .ph{display:inline-block; cursor:pointer; padding:0 1px; border-radius:4px; transition:all .1s;}
+  .ph:active{background:#dbeafe;}
+  .ph.hot{color:#fff; background:var(--blue); transform:scale(1.25);}
+  .hyphen{align-self:center; color:#94a3b8; font-size:30px; font-weight:700; margin:0 1px;}
+
+  .bndRules{display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-top:2px;}
+  .bndRules span{font-size:12px; color:var(--muted); background:#f1f5f9; border-radius:999px; padding:2px 10px;}
+
+  .meta{color:var(--muted); font-size:14px; word-break:break-all;}
+  .meta b{color:var(--ink);}
+
+  .controls{display:flex; gap:10px; justify-content:center; margin-top:16px; flex-wrap:wrap;}
+  .controls button{
+    font-size:15px; padding:10px 16px; border-radius:12px; border:none;
+    background:var(--blue); color:#fff; font-weight:600; cursor:pointer;
+  }
+  .controls button.sec{background:var(--card); color:var(--muted); border:1px solid var(--line);}
+  .controls button:active{transform:scale(.96);}
+
+  .toast{
+    position:fixed; left:50%; bottom:40px; transform:translateX(-50%);
+    background:rgba(20,25,35,.88); color:#fff; padding:10px 20px; border-radius:999px;
+    font-size:14px; opacity:0; pointer-events:none; transition:opacity .25s; white-space:nowrap; z-index:9;
+  }
+  .toast.show{opacity:1;}
+
+  .modal{position:fixed; inset:0; background:rgba(15,23,42,.45); z-index:10;
+    display:flex; align-items:center; justify-content:center; padding:20px;}
+  .modal-card{background:#fff; border-radius:18px; padding:20px; width:100%; max-width:420px;
+    font-size:15px; line-height:1.7; box-shadow:0 10px 40px rgba(0,0,0,.2);}
+  .modal-card h3{margin:0 0 12px; font-size:18px;}
+  .modal-card label.opt{display:block; padding:6px 0; cursor:pointer;}
+  .modal-card input[type=text]{width:100%; font-size:15px; padding:9px 12px; margin:6px 0;
+    border:2px solid var(--line); border-radius:10px; outline:none; box-sizing:border-box;}
+  .modal-card .tip{font-size:12.5px; color:var(--muted); margin:8px 0 0;}
+  .modal-btns{display:flex; gap:10px; justify-content:flex-end; margin-top:16px;}
+  .modal-btns button{font-size:15px; padding:9px 18px; border-radius:10px; border:none; cursor:pointer;}
+  .modal-btns .pri{background:var(--blue); color:#fff; font-weight:600;}
+  .modal-btns .sec{background:#f1f5f9; color:var(--muted);}
+
+  details.rules{margin-top:22px; background:var(--card); border-radius:16px; padding:14px 18px;
+    font-size:14px; color:#334155; line-height:1.9;}
+  details.rules summary{font-weight:700; cursor:pointer; color:var(--ink);}
+  details.rules b{color:var(--red);}
+  footer{text-align:center; color:#94a3b8; font-size:12px; margin-top:18px; line-height:1.7;}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>📖 音节划分器</h1>
+    <p>输入单词 · 元音标红 · 点击划分 · 点音标听发音</p>
+  </header>
+
+  <div class="search">
+    <input id="wordInput" type="text" placeholder="输入一个英语单词，如 student" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <button id="btnShow">显示</button>
+  </div>
+  <div class="samples" id="samples"></div>
+
+  <div class="stage" id="stage">
+    <div class="hint">输入单词后按「显示」，再点击单词自动划分音节</div>
+  </div>
+
+  <div class="controls" id="controls" style="display:none">
+    <button id="btnPlayAll">🔊 逐音节播放</button>
+    <button id="btnTTS" class="sec">🔊 整词朗读</button>
+    <button id="btnSettings" class="sec">⚙ 语音设置</button>
+    <button id="btnReset" class="sec">↺ 重新输入</button>
+  </div>
+
+  <details class="rules">
+    <summary>划分口诀与规则（依据《音节划分与重音位置》）</summary>
+    <div>
+      1️⃣ <b>一个元音一音节</b>：先数元音（元音组合算一个），词尾不发音的 e 不算；<br>
+      2️⃣ <b>一靠后</b>：两元音间 1 个辅音，归后一音节，如 stu-dent、o-pen；<br>
+      3️⃣ <b>二分手</b>：两元音间 2 个辅音，一边一个，如 let-ter、win-ter；<br>
+      4️⃣ <b>组合不拆</b>：th、sh、ch、ck、tch、ph 及辅音连缀保持完整；<br>
+      5️⃣ <b>辅音 + le</b>：-ble / -tle / -ple 自成一个音节，如 ta-ble、lit-tle；<br>
+      6️⃣ <b>重音</b>：单音节词本身重读；双音节多重读在前；多音节一般重读倒数第三；-tion、-ic 等后缀按后缀规则。<br>
+      <span style="color:#94a3b8">音标为英式 DJ 音标，按拼读规则生成，个别不规则词可能存在偏差。</span>
+    </div>
+  </details>
+
+  <footer>元音 <span style="color:var(--red);font-weight:700">红色</span> · 灰色为不发音字母 · ˈ 重音符号<br>点音节卡播放整个音节 · 点单个音标只听该音素<br>音节/音素发音均为华为云 SIS 合成 · 整词朗读走有道在线发音</footer>
+</div>
+<div class="toast" id="toast"></div>
+
+<div class="modal" id="settingsModal" style="display:none">
+  <div class="modal-card">
+    <h3>⚙ 语音设置</h3>
+    <label class="opt"><input type="radio" name="ttsengine" value="eleven"> ElevenLabs 音标合成（邮箱注册免卡，浏览器直连）</label>
+    <div id="elevenFields" style="display:none">
+      <input id="elKey" type="text" placeholder="API Key（个人资料页复制）" autocomplete="off">
+      <select id="elVoice" style="width:100%;font-size:15px;padding:9px 12px;margin:6px 0;border:2px solid var(--line);border-radius:10px;box-sizing:border-box">
+        <option value="pNInz6obpgDQGcFmaJgB">Adam（美音·男）</option>
+        <option value="21m00Tcm4TlvDq8ikWAM">Rachel（美音·女）</option>
+        <option value="JBFqnCBsd6RMkjVDRZzb">George（英音·男）</option>
+        <option value="XB0fDUnXU5powFXDhCwa">Charlotte（英音·女）</option>
+      </select>
+      <p class="tip">注册：elevenlabs.io 邮箱注册（免费，无需信用卡）→ 右上角头像 → Profile + API key → 复制 Key。支持 IPA 音标合成。注意免费层每月约 1 万字符且 SSML 标记计入（约 150 个新音节/月，本应用会缓存）；付费 $5/月起近乎不限。</p>
+    </div>
+    <label class="opt"><input type="radio" name="ttsengine" value="lib" checked> 本地音节库（assets/syllables/，完全离线+音质好，已生成 352 个音节）</label>
+    <div id="libFields" style="display:none">
+      <p class="tip">已用华为云 SIS 为词表内 352 个音节批量生成标准读音（音色：Alvin 英文男声，音量 80），保存在 assets/syllables/ 文件夹，点音节直接播本地文件。遇到库里没有的音节（如生词），会自动通过本机 server.js 实时调 SIS 合成并缓存，之后同样秒播。要批量补充新词，在电脑上运行 <b>gen-syllables.js</b>（用法见脚本顶部注释）。注意：本页面需由 <b>node server.js</b> 启动访问，在线补齐功能才可用。</p>
+    </div>
+    <label class="opt"><input type="radio" name="ttsengine" value="azure"> Azure 智能语音（按音标合成，音质最好，需信用卡注册）</label>
+    <div id="azureFields" style="display:none">
+      <input id="azureRegion" type="text" placeholder="区域 Region，如 eastasia">
+      <input id="azureKey" type="text" placeholder="语音服务密钥 Key">
+      <p class="tip">在 azure.microsoft.com 免费注册「语音服务」(F0 免费层每月 50 万字符)，创建资源时选择区域（如 eastasia / southeastasia / eastus），在「密钥和终结点」页复制 Key。</p>
+    </div>
+    <div class="modal-btns">
+      <button id="btnCloseSettings" class="sec">取消</button>
+      <button id="btnSaveSettings" class="pri">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/*ENGINE-START*/
+'use strict';
+const VOWELS = 'aeiou';
+
+/* 音素表（DJ 英式 48 音素；assets/syllables/PH_*.mp3 为其 SIS 发音） */
+const PHONEMES = ['eɪ','aɪ','ɔɪ','əʊ','aʊ','ɪə','eə','ʊə','iː','uː','ɑː','ɔː','ɜː',
+  'tʃ','dʒ','ts','dz','tr','dr','θ','ð','ʃ','ʒ','ŋ',
+  'æ','ɒ','ʌ','ə','ʊ','ɪ','e','b','d','f','g','h','j','k','l','m','n','p','r','s','t','v','w','z'];
+
+function parseIPA(str){
+  const out = []; let i = 0;
+  outer: while(i < str.length){
+    const ch = str[i];
+    if(ch === 'ˈ' || ch === 'ˌ' || ch === '.' || ch === ' ' || ch === '-'){ i++; continue; }
+    for(const p of PHONEMES){
+      if(str.startsWith(p, i)){ out.push(p); i += p.length; continue outer; }
+    }
+    i++;
+  }
+  return out;
+}
+
+/* ============ 高频不规则词：[划分, 每音节音标, 重音下标] ============ */
+const IRREGULAR = {
+  a:[['a'],['ə'],0], the:[['the'],['ðə'],0],
+  have:[['have'],['hæv'],0], give:[['give'],['gɪv'],0], live:[['live'],['lɪv'],0], love:[['love'],['lʌv'],0],
+  come:[['come'],['kʌm'],0], some:[['some'],['sʌm'],0], done:[['done'],['dʌn'],0], gone:[['gone'],['gɒn'],0],
+  one:[['one'],['wʌn'],0], once:[['once'],['wʌns'],0], son:[['son'],['sʌn'],0],
+  two:[['two'],['tuː'],0], who:[['who'],['huː'],0], whom:[['whom'],['huːm'],0], whose:[['whose'],['huːz'],0],
+  does:[['does'],['dʌz'],0], do:[['do'],['duː'],0], to:[['to'],['tuː'],0],
+  move:[['move'],['muːv'],0], prove:[['prove'],['pruːv'],0], lose:[['lose'],['luːz'],0], shoe:[['shoe'],['ʃuː'],0], shoes:[['shoes'],['ʃuːz'],0],
+  mother:[['moth','er'],['mʌ','ðə'],0], father:[['fa','ther'],['fɑː','ðə'],0], brother:[['bro','ther'],['brʌ','ðə'],0],
+  weather:[['weath','er'],['we','ðə'],0], whether:[['wheth','er'],['we','ðə'],0],
+  together:[['to','geth','er'],['tə','ge','ðə'],1], other:[['oth','er'],['ʌ','ðə'],0],
+  another:[['a','noth','er'],['ə','nʌ','ðə'],1], either:[['ei','ther'],['aɪ','ðə'],0], neither:[['nei','ther'],['naɪ','ðə'],0],
+  they:[['they'],['ðeɪ'],0], them:[['them'],['ðem'],0], then:[['then'],['ðen'],0], than:[['than'],['ðæn'],0],
+  this:[['this'],['ðɪs'],0], that:[['that'],['ðæt'],0], these:[['these'],['ðiːz'],0], those:[['those'],['ðəʊz'],0],
+  there:[['there'],['ðeə'],0], their:[['their'],['ðeə'],0], though:[['though'],['ðəʊ'],0],
+  with:[['with'],['wɪð'],0], without:[['with','out'],['wɪð','aʊt'],0], thus:[['thus'],['ðʌs'],0], his:[['his'],['hɪz'],0],
+  breathe:[['breathe'],['briːð'],0], breath:[['breath'],['breθ'],0], clothes:[['clothes'],['kləʊðz'],0], smooth:[['smooth'],['smuːð'],0],
+  said:[['said'],['sed'],0], says:[['says'],['sez'],0],
+  again:[['a','gain'],['ə','gen'],1], against:[['a','gainst'],['ə','genst'],1],
+  bread:[['bread'],['bred'],0], head:[['head'],['hed'],0], dead:[['dead'],['ded'],0],
+  ready:[['read','y'],['red','i'],0], already:[['al','read','y'],['ɔːl','red','i'],0],
+  great:[['great'],['greɪt'],0], break:[['break'],['breɪk'],0], steak:[['steak'],['steɪk'],0],
+  breakfast:[['break','fast'],['brek','fəst'],0], sweat:[['sweat'],['swet'],0], sweater:[['sweat','er'],['swet','ə'],0],
+  heavy:[['heav','y'],['hev','i'],0],
+  learn:[['learn'],['lɜːn'],0], early:[['ear','ly'],['ɜː','li'],0], earth:[['earth'],['ɜːθ'],0], search:[['search'],['sɜːtʃ'],0],
+  heart:[['heart'],['hɑːt'],0],
+  hear:[['hear'],['hɪə'],0], near:[['near'],['nɪə'],0], dear:[['dear'],['dɪə'],0], year:[['year'],['jɪə'],0],
+  ear:[['ear'],['ɪə'],0], clear:[['clear'],['klɪə'],0], here:[['here'],['hɪə'],0],
+  bear:[['bear'],['beə'],0], pear:[['pear'],['peə'],0], wear:[['wear'],['weə'],0], where:[['where'],['weə'],0],
+  friend:[['friend'],['frend'],0], friendly:[['friend','ly'],['frend','li'],0],
+  people:[['peo','ple'],['piː','pl'],0],
+  because:[['be','cause'],['bɪ','kɒz'],1], water:[['wa','ter'],['wɔː','tə'],0],
+  want:[['want'],['wɒnt'],0], was:[['was'],['wɒz'],0], wash:[['wash'],['wɒʃ'],0], watch:[['watch'],['wɒtʃ'],0],
+  what:[['what'],['wɒt'],0], war:[['war'],['wɔː'],0], warm:[['warm'],['wɔːm'],0],
+  word:[['word'],['wɜːd'],0], work:[['work'],['wɜːk'],0], world:[['world'],['wɜːld'],0], worth:[['worth'],['wɜːθ'],0],
+  worry:[['wor','ry'],['wʌ','ri'],0], wonder:[['won','der'],['wʌn','də'],0],
+  could:[['could'],['kʊd'],0], would:[['would'],['wʊd'],0], should:[['should'],['ʃʊd'],0],
+  you:[['you'],['juː'],0], young:[['young'],['jʌŋ'],0], touch:[['touch'],['tʌtʃ'],0],
+  enough:[['e','nough'],['ɪ','nʌf'],1], tough:[['tough'],['tʌf'],0], rough:[['rough'],['rʌf'],0], laugh:[['laugh'],['lɑːf'],0],
+  eight:[['eight'],['eɪt'],0], height:[['height'],['haɪt'],0], weight:[['weight'],['weɪt'],0],
+  neighbour:[['neigh','bour'],['neɪ','bə'],0], colour:[['col','our'],['kʌ','lə'],0], blood:[['blood'],['blʌd'],0],
+  put:[['put'],['pʊt'],0], pull:[['pull'],['pʊl'],0], push:[['push'],['pʊʃ'],0], full:[['full'],['fʊl'],0],
+  every:[['ev','ery'],['ev','ri'],0], evening:[['eve','ning'],['iːv','nɪŋ'],0],
+  seven:[['sev','en'],['sev','ən'],0], never:[['nev','er'],['nev','ə'],0], ever:[['ev','er'],['ev','ə'],0],
+  river:[['riv','er'],['rɪv','ə'],0], second:[['se','cond'],['se','kənd'],0], very:[['ver','y'],['ver','i'],0],
+  elephant:[['el','e','phant'],['el','ɪ','fənt'],0], family:[['fam','ily'],['fæm','li'],0], pretty:[['pret','ty'],['prɪ','ti'],0],
+  africa:[['af','ri','ca'],['æf','rɪ','kə'],0], houses:[['hous','es'],['haʊz','ɪz'],0],
+  beautiful:[['beau','ti','ful'],['bjuː','tɪ','fl'],0], wonderful:[['won','der','ful'],['wʌn','də','fl'],0],
+  many:[['man','y'],['men','i'],0], any:[['an','y'],['en','i'],0],
+  banana:[['ba','na','na'],['bə','nɑː','nə'],1], potato:[['po','ta','to'],['pə','teɪ','təʊ'],1], tomato:[['to','ma','to'],['tə','mɑː','təʊ'],1],
+  about:[['a','bout'],['ə','baʊt'],1], above:[['a','bove'],['ə','bʌv'],1], away:[['a','way'],['ə','weɪ'],1],
+  ago:[['a','go'],['ə','gəʊ'],1], alive:[['a','live'],['ə','laɪv'],1], asleep:[['a','sleep'],['ə','sliːp'],1],
+  hotel:[['ho','tel'],['həʊ','tel'],1], only:[['on','ly'],['əʊn','li'],0], alarm:[['a','larm'],['ə','lɑːm'],1],
+  police:[['po','lice'],['pə','liːs'],1], zebra:[['zeb','ra'],['zeb','rə'],0],
+  create:[['cre','ate'],['kri','eɪt'],1], creation:[['cre','a','tion'],['kri','eɪ','ʃən'],1],
+  real:[['real'],['rɪəl'],0], really:[['real','ly'],['rɪə','li'],0], reality:[['re','al','ity'],['ri','æl','əti'],1],
+  idea:[['i','de','a'],['aɪ','dɪ','ə'],1], science:[['sci','ence'],['saɪ','əns'],0],
+  quiet:[['qui','et'],['kwaɪ','ət'],0], ocean:[['o','cean'],['əʊ','ʃən'],0], special:[['spe','cial'],['spe','ʃəl'],0],
+  build:[['build'],['bɪld'],0], built:[['built'],['bɪlt'],0], busy:[['bus','y'],['bɪz','i'],0], business:[['busi','ness'],['bɪz','nɪs'],0],
+  geography:[['ge','og','ra','phy'],['dʒiː','ɒg','rə','fi'],1],
+  finger:[['fin','ger'],['fɪŋ','gə'],0], singer:[['sin','ger'],['sɪŋ','ə'],0], angel:[['an','gel'],['eɪn','dʒəl'],0],
+  danger:[['dan','ger'],['deɪn','dʒə'],0], stranger:[['stran','ger'],['streɪn','dʒə'],0], larger:[['lar','ger'],['lɑː','dʒə'],0],
+  large:[['large'],['lɑːdʒ'],0], charge:[['charge'],['tʃɑːdʒ'],0],
+  england:[['eng','land'],['ɪŋ','glənd'],0], english:[['eng','lish'],['ɪŋ','lɪʃ'],0],
+  island:[['is','land'],['aɪ','lənd'],0], answer:[['an','swer'],['ɑːn','sə'],0],
+  listen:[['lis','ten'],['lɪs','ən'],0], castle:[['cas','tle'],['kɑːs','əl'],0], whistle:[['whis','tle'],['wɪs','əl'],0],
+  often:[['of','ten'],['ɒf','ən'],0], climb:[['climb'],['klaɪm'],0], doll:[['doll'],['dɒl'],0],
+  our:[['our'],['aʊə'],0], hour:[['hour'],['aʊə'],0], sour:[['sour'],['saʊə'],0], flour:[['flour'],['flaʊə'],0],
+  poor:[['poor'],['pʊə'],0], sure:[['sure'],['ʃʊə'],0], sugar:[['sug','ar'],['ʃʊg','ə'],0],
+  were:[['were'],['wɜː'],0], are:[['are'],['ɑː'],0], eye:[['eye'],['aɪ'],0], eyes:[['eye','s'],['aɪz'],0],
+  maybe:[['may','be'],['meɪ','bi'],0], whole:[['whole'],['həʊl'],0], month:[['month'],['mʌnθ'],0], monday:[['mon','day'],['mʌn','deɪ'],0],
+  money:[['mon','ey'],['mʌn','i'],0], monkey:[['mon','key'],['mʌŋ','ki'],0], honey:[['hon','ey'],['hʌn','i'],0],
+  minute:[['min','ute'],['mɪn','ɪt'],0], orange:[['or','ange'],['ɒr','ɪndʒ'],0],
+  village:[['vil','lage'],['vɪl','ɪdʒ'],0], cabbage:[['cab','bage'],['kæb','ɪdʒ'],0],
+  favourite:[['fa','vour','ite'],['feɪ','və','rɪt'],0], favorite:[['fa','vorite'],['feɪ','rə','rɪt'],0],
+  tomorrow:[['to','mor','row'],['tə','mɒr','əʊ'],1],
+  telephone:[['tel','e','phone'],['tel','ɪ','fəʊn'],0],
+  television:[['tel','e','vi','sion'],['tel','ɪ','vɪ','ʒən'],0], vision:[['vi','sion'],['vɪ','ʒən'],0],
+  decision:[['de','ci','sion'],['dɪ','sɪ','ʒən'],1],
+  understand:[['un','der','stand'],['ʌn','də','stænd'],2],
+  something:[['some','thing'],['sʌm','θɪŋ'],0], nothing:[['no','thing'],['nʌ','θɪŋ'],0], anything:[['an','y','thing'],['en','ɪ','θɪŋ'],0],
+  animal:[['an','i','mal'],['æn','ɪ','məl'],0], alphabet:[['al','pha','bet'],['æl','fə','bet'],0],
+  secret:[['se','cret'],['siː','krət'],0], question:[['ques','tion'],['kwes','tʃən'],0],
+  woman:[['wom','an'],['wʊ','mən'],0], women:[['wom','en'],['wɪm','ɪn'],0],
+  saturday:[['sat','ur','day'],['sæt','ə','deɪ'],0], museum:[['mu','se','um'],['mjuː','zɪ','əm'],1],
+  shall:[['shall'],['ʃæl'],0], shallow:[['shal','low'],['ʃæl','əʊ'],0],
+  most:[['most'],['məʊst'],0], post:[['post'],['pəʊst'],0], host:[['host'],['həʊst'],0],
+  now:[['now'],['naʊ'],0], how:[['how'],['haʊ'],0], cow:[['cow'],['kaʊ'],0], wow:[['wow'],['waʊ'],0],
+  horse:[['horse'],['hɔːs'],0], nurse:[['nurse'],['nɜːs'],0], purse:[['purse'],['pɜːs'],0],
+  worse:[['worse'],['wɜːs'],0], verse:[['verse'],['vɜːs'],0],
+  agree:[['a','gree'],['ə','griː'],1],
+  study:[['stud','y'],['stʌd','i'],0], yes:[['yes'],['jes'],0], bus:[['bus'],['bʌs'],0], gas:[['gas'],['gæs'],0],
+  hundred:[['hun','dred'],['hʌn','drəd'],0], playground:[['play','ground'],['pleɪ','graʊnd'],0],
+  classroom:[['class','room'],['klɑːs','ruːm'],0], blackboard:[['black','board'],['blæk','bɔːd'],0],
+  usually:[['u','su','al','ly'],['juː','ʒu','ə','li'],0], piano:[['pi','a','no'],['piː','ɑː','nəʊ'],1],
+  giraffe:[['gi','raffe'],['dʒə','rɑːf'],1], kangaroo:[['kan','ga','roo'],['kæn','gə','ruː'],2],
+  penguin:[['pen','guin'],['peŋ','gwɪn'],0], listening:[['lis','ten','ing'],['lɪs','tən','ɪŋ'],0],
+  interesting:[['in','te','rest','ing'],['ɪn','tə','rəst','ɪŋ'],0], vegetable:[['vege','ta','ble'],['vedʒ','tə','bl'],0],
+  chocolate:[['choc','o','late'],['tʃɒk','ə','lət'],0], afternoon:[['af','ter','noon'],['ɑːf','tə','nuː'],2],
+  january:[['jan','u','a','ry'],['dʒæn','ju','ə','ri'],0], february:[['feb','ru','a','ry'],['feb','ru','ə','ri'],0],
+  july:[['ju','ly'],['dʒu','laɪ'],1],
+  visit:[['vis','it'],['vɪz','ɪt'],0], comfortable:[['com','for','ta','ble'],['kʌmf','tə','tə','bl'],0],
+  queue:[['queue'],['kjuː'],0],
+};
+
+/* ============ 基础数据 ============ */
+const TEAMS3 = ['igh','augh','ough','eau','uy'];
+const TEAMS2 = ['ai','ay','ea','ee','ei','eu','ew','ey','ie','oa','oe','oi','oo','ou','ow','oy','au','aw','ue','ui'];
+const ONSETS = new Set(['b','c','d','f','g','h','j','k','l','m','n','p','r','s','t','v','w','y','z',
+  'bl','br','ch','cl','cr','dr','dw','fl','fr','gl','gr','ph','pl','pr','qu','sc','sh','sk','sl','sm','sn','sp','st','sw','th','tr','tw','wh','wr',
+  'shr','spl','spr','scr','str','thr','sch','sph']);
+const DIGRAPH_FWD = new Set(['th','sh','ch','ph','gh']);   // 单元音后靠后 mo-ther
+const DIGRAPH_CLOSE = new Set(['ck','tch']);               // 总是结尾 chick-en
+const TH_VOICED = new Set(['the','this','that','these','those','then','than','them','there','they','their','though','thus',
+  'other','another','either','neither','whether','mother','father','brother','weather','together','bother','rather','with','without','within','smooth','breathe','clothes','heather','feather','leather','northern','southern']);
+const GE_HARD = new Set(['get','girl','gift','give','begin','tiger','hunger','bigger','longer','stronger','younger','manager']);
+const SHORTOO = ['book','look','cook','took','foot','good','wood','hood','stood','shook','wool','cookie','football','goodbye','classroom'];
+const LONG_MAP = {a:'eɪ', e:'iː', i:'aɪ', o:'əʊ', u:'juː', y:'aɪ'};
+const SHORT_MAP = {a:'æ', e:'e', i:'ɪ', o:'ɒ', u:'ʌ', y:'ɪ'};
+const UNSTRESSED_OPEN = {a:'ə', e:'ɪ', i:'ɪ', o:'ə', u:'ə', y:'ɪ'};
+const UNSTRESSED_CLOSED = {a:'ə', e:'ə', i:'ɪ', o:'ə', u:'ə', y:'ɪ'};
+const TEAM_MAP = {
+  ai:'eɪ', ay:'eɪ', ei:'eɪ', ea:'iː', ee:'iː', ie:'iː', oa:'əʊ', oe:'əʊ', oo:'uː', ey:'eɪ',
+  oi:'ɔɪ', oy:'ɔɪ', ou:'aʊ', au:'ɔː', aw:'ɔː', ue:'uː', ui:'uː', eu:'juː', ew:'juː',
+  igh:'aɪ', augh:'ɔː', ough:'ɔː', eau:'juː', uy:'aɪ'
+};
+const CENTER_MAP = { a:'eə', e:'ɪə', i:'aɪə', o:'ɔː', u:'jʊə' };  // care/here/fire/more/pure
+const RCODA_MAP = { ar:'ɑː', or:'ɔː', er:'ɜː', ir:'ɜː', ur:'ɜː', ear:'ɪə', eer:'ɪə', air:'eə', oar:'ɔː', oor:'ɔː', our:'ɔː', eir:'eə' };
+
+function isVoicelessC(c){
+  if(c === 'ch' || c === 'sh') return true;
+  return c.length === 1 && 'ptkfcsxh'.includes(c);
+}
+
+/* ============ 后缀处理 ============ */
+function trySuffix(w){
+  const cut = (tail, minLen) => {
+    if(!w.endsWith(tail)) return null;
+    const stem = w.slice(0, w.length - tail.length);
+    return (stem.length >= minLen && /[aeiouy]/.test(stem)) ? stem : null;
+  };
+  let stem;
+  if((stem = cut('tious', 3)) !== null) return {tail:'tious', stem, mode:'card', ipa:'ʃəs', tag:'后缀-tious'};
+  if((stem = cut('cious', 3)) !== null) return {tail:'cious', stem, mode:'card', ipa:'ʃəs', tag:'后缀-cious'};
+  if((stem = cut('tion', 2)) !== null) return {tail:'tion', stem, mode:'card', ipa:'ʃən', tag:'后缀-tion'};
+  if((stem = cut('sion', 2)) !== null) return {tail:'sion', stem, mode:'card', ipa:/[aeiouy]$/.test(stem) ? 'ʒən' : 'ʃən', tag:'后缀-sion'};
+  if((stem = cut('ture', 3)) !== null) return {tail:'ture', stem, mode:'card', ipa:'tʃə', tag:'后缀-ture'};
+  if((stem = cut('cial', 3)) !== null) return {tail:'cial', stem, mode:'card', ipa:'ʃəl', tag:'后缀-cial'};
+  if((stem = cut('tial', 3)) !== null) return {tail:'tial', stem, mode:'card', ipa:'ʃəl', tag:'后缀-tial'};
+  if((stem = cut('ious', 3)) !== null) return {tail:'ious', stem, mode:'card', ipa:'iəs', tag:'后缀-ious'};
+  if((stem = cut('ous', 3)) !== null) return {tail:'ous', stem, mode:'card', ipa:'əs', tag:'后缀-ous'};
+  if((stem = cut('age', 3)) !== null && !/[aeiouy]$/.test(stem)) return {tail:'age', stem, mode:'card', ipa:'ɪdʒ', tag:'后缀-age'};
+  if((stem = cut('ful', 3)) !== null) return {tail:'ful', stem, mode:'card', ipa:'fl', tag:'后缀-ful'};
+  if((stem = cut('ly', 2)) !== null && !/[aeiouy]$/.test(stem)) return {tail:'ly', stem, mode:'card', ipa:'li', tag:'后缀-ly'};
+  /* -ed */
+  if((stem = cut('ed', 3)) !== null){
+    if(/[td]$/.test(stem)) return {tail:'ed', stem, mode:'card', ipa:'ɪd', tag:'后缀-ed'};
+    let stemW = stem;
+    const restore = /^[^aeiou]*[aeiou][b-df-hj-np-tvwxz]$/.test(stem);   // 单元音+单辅音结尾才还原 e（shav→shave）
+    if(restore) stemW = stem + 'e';
+    return {tail:'ed', stem, stemW, mode:'merge', ipa:isVoicelessC(stem[stem.length-1]) ? 't' : 'd', tag:'后缀-ed', restore};
+  }
+  /* -s / -es */
+  if(w.length > 3 && w[w.length-1] === 's'){
+    const c3 = w[w.length-3], two = w.slice(-2);
+    if(two === 'es'){
+      if('sxz'.includes(c3) || /(ch|sh)$/.test(w.slice(0, -2))){
+        stem = w.slice(0, -2);
+        return {tail:'es', stem, mode:'card', ipa:'ɪz', tag:'后缀-es'};      // box-es
+      }
+      if(c3 === 'c' || c3 === 'g'){
+        stem = w.slice(0, -1);
+        return {tail:'s', stem, mode:'merge', ipa:'ɪz', tag:'后缀-s'};       // change-s
+      }
+      if('aeiouy'.includes(c3)){
+        stem = w.slice(0, -1);
+        return {tail:'s', stem, mode:'merge', ipa:'z', tag:'后缀-s'};        // goe-s(=goes)
+      }
+      stem = w.slice(0, -1);
+      return {tail:'s', stem, mode:'merge', ipa:'', tag:'', dynS:true};     // make-s
+    }
+    if((stem = cut('s', 3)) !== null){
+      const dbl = (w[w.length-1] === w[w.length-2] && !'aeiou'.includes(w[w.length-1])) ? w[w.length-1] : null;
+      return {tail:'s', stem, mode:'merge', ipa:'', tag:'', dynS:true, dbl}; // cat-s / clas-s
+    }
+  }
+  /* -ing */
+  if((stem = cut('ing', 2)) !== null){
+    let stemW = stem, restore = false;
+    if(/^[^aeiou]*[aeiou][b-df-hj-np-tvwxz]$/.test(stem)){ stemW = stem + 'e'; restore = true; }  // mak(e)→making
+    return {tail:'ing', stem, stemW, mode:'card', ipa:'ɪŋ', tag:'后缀-ing', restore};
+  }
+  return null;
+}
+
+/* ============ 划分 ============ */
+function markTypes(w){
+  const T = [];
+  for(let i = 0; i < w.length; i++){
+    const ch = w[i];
+    if(ch === 'y') T.push(i === 0 ? 'c' : 'v');
+    else T.push(VOWELS.includes(ch) ? 'v' : 'c');
+  }
+  for(let i = 1; i < w.length; i++) if(w[i] === 'u' && w[i-1] === 'q') T[i] = 'c';
+  return T;
+}
+
+function findGroups(w, T){
+  const groups = []; let i = 0;
+  while(i < w.length){
+    if(T[i] === 'v'){
+      let m = null;
+      for(const t of TEAMS3){
+        const pure = (t === 'eau' || t === 'uy');
+        if(w.startsWith(t, i) && (!pure || (T[i+1] === 'v' && T[i+2] === 'v'))){ m = t; break; }
+      }
+      if(!m){
+        for(const t of TEAMS2){
+          const ok2 = (T[i+1] === 'v') || w[i+1] === 'w';   // w 在元音后可作组合成员 (ow/aw/ew)
+          if(w.startsWith(t, i) && ok2){
+            if(t === 'ie' && w[i+2] === 't') continue; // quiet / diet
+            m = t; break;
+          }
+        }
+      }
+      if(m){ groups.push({start:i, end:i+m.length-1, letters:m}); i += m.length; }
+      else { groups.push({start:i, end:i, letters:w[i]}); i++; }
+    } else i++;
+  }
+  return groups;
+}
+
+function analyzeCore(w, depth){
+  depth = depth || 0;
+
+  /* 1) 后缀 */
+  const suf = trySuffix(w);
+  if(suf){
+    const stemRes = analyzeStem(suf.stemW || suf.stem, depth + 1);
+    const last = stemRes.sylls[stemRes.sylls.length - 1];
+    if(stemRes.magicShape){ last.magicOwn = stemRes.magicShape; }
+    if(suf.mode === 'card'){
+      if(suf.restore && last.text.endsWith('e') && last.text.length > 2) last.text = last.text.slice(0, -1);
+      stemRes.sylls.push({text:suf.tail, suffix:suf.ipa, isLE:false, wordStart:suf.stem.length});
+      stemRes.boundaries.push(suf.tag);
+    } else {
+      last.coreText = last.text;
+      last.text += suf.tail;
+      last.merged = suf.dynS ? {dynS:true} : {end:suf.ipa};
+      if(suf.tag) stemRes.boundaries.push(suf.tag);
+    }
+    if(suf.dbl) stemRes.doubleTail = suf.dbl;
+    stemRes.word = w;
+    return stemRes;
+  }
+
+  /* 2) 元音组 */
+  const T = markTypes(w);
+  const groups = findGroups(w, T);
+  const n = w.length;
+  if(groups.length === 0) return {word:w, sylls:[{text:w, vStart:0, vEnd:0, wordStart:0, ipa:[]}], boundaries:[], stress:0};
+
+  /* 3) 词尾形状（不发音 e / 辅音+le） */
+  let magicShape = null;
+  if(n >= 3 && w[n-1] === 'e' && groups.length >= 2){
+    if(w[n-2] === 'r' && T[n-3] === 'v') magicShape = 'center';      // care
+    else if(T[n-2] === 'c' && T[n-3] === 'v') magicShape = 'long';   // cake
+    else if(n >= 5 && T[n-4] === 'v'){
+      const cc = w.slice(n-3, n-1);
+      if(cc === 'st') magicShape = 'long';                            // taste
+      else if(cc === 'ng') magicShape = 'ng';                         // change
+      else if(cc === 'dg' || cc === 'nc' || cc === 'ns') magicShape = 'short'; // bridge/prince
+    }
+  }
+  if(magicShape && groups[groups.length-1].start === n-1) groups.pop();
+
+  let leSyl = null;
+  if(!magicShape && n >= 3 && w.endsWith('le') && T[n-3] === 'c'){
+    if(groups.length >= 2 && groups[groups.length-1].start === n-1) groups.pop();
+    leSyl = {start:n-3, end:n-1};
+  }
+
+  /* 4) 音节槽与切分 */
+  const slots = groups.map(g => ({kind:'v', start:g.start, end:g.end}));
+  if(leSyl) slots.push({kind:'le', start:leSyl.start, end:leSyl.end});
+
+  const cuts = [0]; const boundaries = [];
+  for(let s = 0; s < slots.length - 1; s++){
+    const a = slots[s].end + 1, b = slots[s+1].start;
+    const run = w.slice(a, b), k = b - a;
+    const nextIsLE = slots[s+1].kind === 'le';
+    let i;
+    if(k === 0){ i = 0; boundaries.push('元音相接'); }
+    else if(k === 1){
+      i = (run === 'x') ? 1 : (nextIsLE ? 1 : 0);
+      boundaries.push(run === 'x' ? 'x 靠前' : (nextIsLE ? '二分手' : '一靠后'));
+    }
+    else if(k === 2){
+      if(DIGRAPH_CLOSE.has(run)){ i = 2; boundaries.push('组合不拆'); }
+      else if(DIGRAPH_FWD.has(run)){
+        const before = w.slice(slots[s].start, slots[s].end + 1);
+        i = (before.length > 1) ? 2 : 0;
+        boundaries.push('组合不拆');
+      }
+      else { i = 1; boundaries.push('二分手'); }
+    }
+    else {
+      const head2 = run.slice(0, 2);
+      if(DIGRAPH_CLOSE.has(head2) || DIGRAPH_FWD.has(head2) || head2 === 'ng'){ i = 2; boundaries.push('组合不拆'); }
+      else {
+        i = k - 1;
+        for(const cand of [1, 2, k-1]){ if(ONSETS.has(run.slice(cand))){ i = cand; break; } }
+        boundaries.push('多辅音偏分');
+      }
+    }
+    cuts.push(a + i);
+  }
+  cuts.push(n);
+
+  const sylls = [];
+  for(let s = 0; s < slots.length; s++){
+    const cs = cuts[s];
+    let ce = (s === slots.length - 1) ? n : cuts[s+1];
+    ce = Math.max(ce, slots[s].end + 1);
+    const text = w.slice(cs, ce);
+    let rDropped = false;
+    if(s < slots.length - 1 && text.endsWith('r') && w[ce] === 'r') rDropped = true;
+    sylls.push({
+      text, wordStart:cs,
+      vStart:slots[s].start, vEnd:slots[s].end,
+      isLE: slots[s].kind === 'le', suffix:null, rDropped
+    });
+  }
+  return {word:w, sylls, boundaries, magicShape};
+}
+
+function isVoicedPh(p){
+  if(!p) return true;
+  return !('ptkfcsθʃ'.includes(p) || p === 'tʃ');
+}
+
+/* ============ 重音 ============ */
+function findStress(word, sylls){
+  const n = sylls.length;
+  if(n <= 1) return 0;
+  if(n === 2 && sylls[0].text === 'a') return 1;
+  if(/(ous|et|ry|ly)$/.test(word)) return Math.max(0, n-3);
+  if(/(tion|sion|cial|tial|tious|cious|ture|ful|ic|ant|ent|ance|ence|ive|ial|ual|ity|ify|ess|age|ing)$/.test(word)) return n-2;
+  if(/(er|or|ar|le|a)$/.test(word) || /(?<![aeiou])y$/.test(word)) return n-2;
+  if(n === 2) return 0;
+  return Math.max(0, n-3);
+}
+
+/* ============ 音标 ============ */
+function consMap(ch, nextCh, ctx){
+  const nx = nextCh || (ctx && ctx.next) || '';
+  const soft = nx !== '' && 'eiy'.includes(nx);
+  switch(ch){
+    case 'c': return soft ? 's' : 'k';
+    case 'g': {
+      if(ctx && (ctx.gerFinal || GE_HARD.has(ctx.word))) return 'g';
+      return soft ? 'dʒ' : 'g';
+    }
+    case 'x': return 'ks';
+    case 'j': return 'dʒ';
+    case 'q': return 'k';
+    case 'y': return 'j';
+    default: return ch;
+  }
+}
+
+function consPhonemes(letters, ctx){
+  const out = [];
+  let i = 0;
+  const push = (p) => { if(p) out.push(p); };
+  while(i < letters.length){
+    const rest = letters.slice(i);
+    let ph = null, step = 1;
+    if(rest.startsWith('tch')){ ph = 'tʃ'; step = 3; }
+    else if(rest.startsWith('dge') || (rest.startsWith('dg') && ctx.tail === 'e')){ ph = 'dʒ'; step = rest.startsWith('dge') ? 3 : 2; }
+    else if(rest.startsWith('nge')){ out.push('n'); push('dʒ'); i += 3; continue; }
+    else if(rest.startsWith('ch')){ ph = 'tʃ'; step = 2; }
+    else if(rest.startsWith('sh')){ ph = 'ʃ'; step = 2; }
+    else if(rest.startsWith('th')){ ph = TH_VOICED.has(ctx.word) ? 'ð' : 'θ'; step = 2; }
+    else if(rest.startsWith('ph')){ ph = 'f'; step = 2; }
+    else if(rest.startsWith('wh')){ ph = 'w'; step = 2; }
+    else if(rest.startsWith('ck')){ ph = 'k'; step = 2; }
+    else if(rest.startsWith('ng')){ ph = 'ŋ'; step = 2; }
+    else if(rest.startsWith('qu')){ out.push('k'); push('w'); i += 2; continue; }
+    else if(rest.startsWith('gh')){ ph = ''; step = 2; }
+    else if(rest.startsWith('kn') && ctx.absPos + i === 0){ ph = 'n'; step = 2; }
+    else if(rest.startsWith('wr') && ctx.absPos + i === 0){ ph = 'r'; step = 2; }
+    else if(rest.startsWith('mb') && ctx.absPos + i + 1 === ctx.wordLen - 1){ ph = 'm'; step = 2; }
+    else if(letters[i] === 'e' && ctx.tail === 'e' && i === letters.length - 1){ i += 1; continue; }  // 不发音 e
+    else if(letters[i] === letters[i+1]){ ph = consMap(letters[i], letters[i+2], ctx); step = 2; }
+    else if(letters[i] === 'n' && (letters[i+1] === 'k' || letters[i+1] === 'g')){ out.push('ŋ'); i += 1; continue; }
+    else ph = consMap(letters[i], letters[i+1], ctx);
+    if(ph === 'ks'){ out.push('k'); push('s'); }
+    else push(ph);
+    i += step;
+  }
+  return out;
+}
+
+function aSpecial(coda, dbl){
+  const c = dbl ? coda + dbl : coda;
+  if(/^(nc|ns|st|sk|ss|ft|lf|sp)/.test(c)) return 'ɑː';
+  if(/^(ll|lk)/.test(c)) return 'ɔː';
+  return null;
+}
+
+function vowelPhoneme(vv, coda, o){
+  if(o.rDropped) return vv === 'o' ? 'ʌ' : (SHORT_MAP[vv] || 'æ');
+  if(o.magicShape === 'center' && coda === 're'){
+    return CENTER_MAP[vv] || 'ə';
+  }
+  if(coda === 'r'){
+    const key = vv + 'r';
+    if(RCODA_MAP[key] !== undefined){
+      if(!o.stressed && (key === 'er' || key === 'or' || key === 'ar' || key === 'ur')) return 'ə';
+      return RCODA_MAP[key];
+    }
+    if(vv.length === 1 && !o.stressed && o.isLast) return 'ə';
+  }
+  if(o.magicShape === 'long' || o.magicShape === 'ng'){
+    if(TEAM_MAP[vv]) return TEAM_MAP[vv];
+    if(o.magicShape === 'ng' && (vv === 'o' || vv === 'u')) return SHORT_MAP[vv] || 'ɒ';
+    if(vv === 'u' && (o.prevL === 'r' || o.prevL === 'l' || o.prevL === 'j')) return 'uː';
+    return LONG_MAP[vv] || 'ə';
+  }
+  if(o.magicShape === 'short'){
+    if(vv === 'a'){ const sp = aSpecial(coda, o.dbl); if(sp) return sp; }
+    return SHORT_MAP[vv] || 'æ';
+  }
+  if(TEAM_MAP[vv]){
+    if(vv === 'ow') return o.isLast ? 'əʊ' : 'aʊ';
+    if(vv === 'ie') return o.isLast ? ((o.sylCount || 1) === 1 ? 'aɪ' : 'ɪ') : 'iː';   // pie vs cities
+    if(vv === 'ey') return (o.isLast && !o.stressed) ? 'ɪ' : 'eɪ';
+    if(vv === 'ew' || vv === 'eu') return (o.prevL === 'r' || o.prevL === 'l') ? 'uː' : 'juː';
+    if(vv === 'oo') return SHORTOO.some(s => o.word.includes(s)) ? 'ʊ' : 'uː';
+    return TEAM_MAP[vv];
+  }
+  if(coda.length === 0){
+    if(o.stressed){
+      if(vv === 'u') return (o.prevL === 'r' || o.prevL === 'l' || o.prevL === 'j') ? 'uː' : 'juː';
+      return LONG_MAP[vv] || 'ə';
+    }
+    return UNSTRESSED_OPEN[vv] || 'ə';
+  }
+  if(o.stressed){
+    if(vv === 'a'){ const sp = aSpecial(coda, o.dbl); if(sp) return sp; }
+    if(vv === 'i' && /^(nd|ld)/.test(coda)) return 'aɪ';
+    if(vv === 'o' && /^ld/.test(coda)) return 'əʊ';
+    return SHORT_MAP[vv] || 'æ';
+  }
+  return UNSTRESSED_CLOSED[vv] || 'ə';
+}
+
+function sylIPA(res, idx){
+  const syl = res.sylls[idx];
+  const w = res.word;
+  const appendMerged = (ps) => {
+    if(!syl.merged) return ps;
+    if(syl.merged.dynS) return ps.concat([isVoicedPh(ps[ps.length-1]) ? 'z' : 's']);
+    return ps.concat(parseIPA(syl.merged.end));
+  };
+  if(syl.irrIpa) return parseIPA(syl.irrIpa);
+  if(syl.suffix) return parseIPA(syl.suffix);
+  if(syl.isLE){
+    return appendMerged([...consPhonemes(syl.coreText ? syl.coreText.slice(0, -2) : syl.text.slice(0, -2), mkCtx(w, syl)), 'ə', 'l']);
+  }
+  const s = syl.coreText || syl.text;
+  const rel = syl.vStart - syl.wordStart;
+  const vLen = syl.vEnd - syl.vStart + 1;
+  const onsetS = s.slice(0, rel), vowelS = s.slice(rel, rel + vLen);
+  let codaS = s.slice(rel + vLen);
+  const isLast = idx === res.sylls.length - 1;
+  const stressed = idx === res.stress;
+  const prevL = onsetS ? onsetS[onsetS.length-1] : (w[syl.wordStart-1] || '');
+  const magicShape = syl.magicOwn || (isLast ? res.magicShape : null);
+  let strippedE = false;
+  if(magicShape && magicShape !== 'center' && codaS.endsWith('e') && codaS.length >= 2){ codaS = codaS.slice(0, -1); strippedE = true; }
+
+  const vo = {stressed, word:w, magicShape, isLast, rDropped:syl.rDropped, prevL,
+              dbl:(isLast ? res.doubleTail : null), sylCount:res.sylls.length};
+  let v, codaP;
+  if(magicShape === 'center' && codaS === 're'){
+    v = CENTER_MAP[vowelS] || 'ə';
+    codaP = [];
+  } else if(codaS.startsWith('r') && !syl.rDropped){
+    const key = vowelS + 'r';
+    if(RCODA_MAP[key] !== undefined){
+      v = stressed ? RCODA_MAP[key] : ((key === 'ar' || key === 'or' || key === 'er' || key === 'ur') ? 'ə' : RCODA_MAP[key]);
+      const ctx = mkCtx(w, syl);
+      ctx.next = codaS.slice(1)[0] || '';
+      codaP = consPhonemes(codaS.slice(1), ctx);
+    }
+  }
+  if(v === undefined){
+    v = vowelPhoneme(vowelS, codaS, vo);
+    const ctx = mkCtx(w, syl);
+    ctx.next = strippedE ? 'e'
+      : (syl.merged ? (syl.text[s.length] || '')                 /* 后缀首字母，如 danced 的 e */
+      : (isLast ? '' : (res.sylls[idx+1] ? res.sylls[idx+1].text[0] : '')));
+    ctx.tail = strippedE ? 'e' : '';
+    codaP = consPhonemes(codaS + (strippedE ? 'e' : ''), ctx);
+  }
+  const ctx2 = mkCtx(w, syl);
+  ctx2.next = vowelS[0];
+  ctx2.gerFinal = isLast && /(ger|gest|est)$/.test(s) && /^(g|str)/.test(s);   // tiger/biggest 的 g 不软化
+  const onsetP = consPhonemes(onsetS, ctx2);
+  if(syl.rDropped && codaP[codaP.length-1] === 'r') codaP.pop();
+  /* 词尾 s 浊化（非后缀 -s 情况） */
+  if(isLast && !syl.merged && codaP[codaP.length-1] === 's'){
+    const before = codaP.length >= 2 ? codaP[codaP.length-2] : v;
+    if(isVoicedPh(before)) codaP[codaP.length-1] = 'z';
+  }
+  const fix = p => PHONEMES.includes(p) ? [p] : parseIPA(p);   // 复合音(如 aɪə/juː)拆为单独音频
+  return appendMerged([...onsetP, v, ...codaP].flatMap(fix));
+}
+
+function mkCtx(w, syl){
+  return {word:w, wordLen:w.length, absPos:syl.wordStart || 0, next:'', tail:'', gerFinal:false};
+}
+
+/* ============ 汇总 ============ */
+function analyzeStem(w, depth){
+  const irr = IRREGULAR[w];
+  if(irr && irr[0].length === irr[1].length && irr[0].join('') === w){
+    const [d, p, s] = irr;
+    const norm = str => str.replace(/i(?![ː])/g, 'ɪ').replace(/u(?![ː])/g, 'ʊ');  // 裸 i/u 规范化
+    const res = {word:w, stress:s, sylls:d.map(t => ({text:t, irrIpa:null, wordStart:0})), boundaries:[], irregular:true};
+    p.forEach((ipa, i) => { res.sylls[i].irrIpa = norm(ipa); });
+    let off = 0;
+    res.sylls.forEach(sy => { sy.wordStart = off; off += sy.text.length; });
+    return res;
+  }
+  return analyzeCore(w, depth);
+}
+
+function analyze(raw){
+  let w = (raw||'').toLowerCase().trim().replace(/[^a-z]/g,'');
+  if(!w) return null;
+  return finalize(analyzeStem(w));
+}
+
+function finalize(res){
+  if(res.stress === undefined) res.stress = findStress(res.word, res.sylls);
+  res.sylls.forEach((s, i) => { s.ipa = sylIPA(res, i); });
+  if(res.stress >= res.sylls.length) res.stress = 0;
+  res.ipaText = res.sylls.map((s, i) => (i === res.stress && res.sylls.length > 1 ? 'ˈ' : '') + s.ipa.join('')).join('.');
+  return res;
+}
+/*ENGINE-END*/
+
+/* ===================== UI ===================== */
+(function(){
+  const $ = id => document.getElementById(id);
+  const input = $('wordInput'), stage = $('stage'), controls = $('controls');
+  let current = null, divided = false, playingToken = 0;
+
+  const SAMPLES = ['student','banana','beautiful','computer','apple','little','teacher','elephant','station','water'];
+
+  function toast(msg){
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(t._tm); t._tm = setTimeout(() => t.classList.remove('show'), 1800);
+  }
+
+  SAMPLES.forEach(word => {
+    const b = document.createElement('button');
+    b.textContent = word;
+    b.onclick = () => { input.value = word; showWord(); };
+    $('samples').appendChild(b);
+  });
+
+  function letterClasses(res, syl){
+    /* 返回每个字母的类别：v(红) / silent(灰) / ''(黑) */
+    const out = [];
+    const s = syl.text, base = syl.wordStart || 0;
+    if((syl.irrIpa !== null && syl.irrIpa !== undefined) || syl.suffix){
+      [...s].forEach((ch, i) => {
+        if('aeiou'.includes(ch)) out.push('v');
+        else if(ch === 'y' && base + i > 0) out.push('v');
+        else out.push('');
+      });
+      return out;
+    }
+    if(syl.isLE){
+      for(let i = 0; i < s.length; i++) out.push(i >= s.length - 2 ? 'v' : '');
+      return out;
+    }
+    const core = syl.coreText || s;
+    for(let i = 0; i < core.length; i++){
+      const abs = base + i;
+      if(syl.vStart !== undefined && abs >= syl.vStart && abs <= syl.vEnd) out.push('v');
+      else if(ch_isSilentE(res, syl, i, abs)) out.push('silent');
+      else out.push('');
+    }
+    /* 后缀字母（如 making 的 ing）按普通规则着色 */
+    for(let i = core.length; i < s.length; i++){
+      out.push('aeiou'.includes(s[i]) ? 'v' : '');
+    }
+    return out;
+  }
+  function ch_isSilentE(res, syl, i, abs){
+    const s = syl.text;
+    if(s[i] !== 'e' || i !== s.length - 1) return false;
+    if(res.sylls[res.sylls.length-1] !== syl) return false;
+    return !!res.magicShape;
+  }
+
+  function spanLetters(res, syl, cls){
+    const div = document.createElement('div');
+    div.className = cls;
+    letterClasses(res, syl).forEach((t, i) => {
+      const sp = document.createElement('span');
+      sp.textContent = syl.text[i];
+      sp.className = t;
+      div.appendChild(sp);
+    });
+    return div;
+  }
+
+  function renderWhole(res){
+    stage.innerHTML = '';
+    const word = document.createElement('div');
+    word.id = 'wordWhole';
+    const T = markTypes(res.word);
+    [...res.word].forEach((ch, i) => {
+      const sp = document.createElement('span');
+      sp.textContent = ch;
+      let t = '';
+      if(T[i] === 'v') t = 'v';
+      else if(res.magicShape && i === res.word.length - 1) t = 'silent';
+      else if(ch === 'g' || ch === 'h'){
+        for(let j = Math.max(0, i-2); j <= i; j++) if(res.word.startsWith('igh', j) && i === j+2) t = 'v';
+      }
+      sp.className = t;
+      word.appendChild(sp);
+    });
+    word.onclick = renderDivided;
+    const hint = document.createElement('div');
+    hint.className = 'hint'; hint.textContent = '👆 点击单词，划分音节';
+    stage.appendChild(word); stage.appendChild(hint);
+  }
+
+  function renderDivided(){
+    if(divided) return;
+    divided = true;
+    const res = current;
+    stage.innerHTML = '';
+    const wrap = document.createElement('div'); wrap.id = 'sylWrap';
+    res.sylls.forEach((syl, i) => {
+      if(i > 0){
+        const hy = document.createElement('div'); hy.className = 'hyphen'; hy.textContent = '-';
+        wrap.appendChild(hy);
+      }
+      const card = document.createElement('div');
+      card.className = 'syl' + (i === res.stress && res.sylls.length > 1 ? ' stress' : '');
+      card.style.animationDelay = (i*70) + 'ms';
+      card.appendChild(spanLetters(res, syl, 'txt'));
+      const ipa = document.createElement('div'); ipa.className = 'ipa';
+      if(i === res.stress && res.sylls.length > 1){
+        const mk = document.createElement('span'); mk.className = 'mark'; mk.textContent = 'ˈ';
+        ipa.appendChild(mk);
+      }
+      syl.ipa.forEach(ph => {
+        const sp = document.createElement('span');
+        sp.className = 'ph'; sp.textContent = ph;
+        sp.onclick = (e) => { e.stopPropagation(); playPhoneme(ph, sp); };
+        ipa.appendChild(sp);
+      });
+      card.appendChild(ipa);
+      card.onclick = () => playSyllable(i);
+      wrap.appendChild(card);
+    });
+    stage.appendChild(wrap);
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.innerHTML = `<b>${res.sylls.length}</b> 个音节 · 重音在第 <b>${res.stress+1}</b> 个音节<br>${res.ipaText}`;
+    stage.appendChild(meta);
+
+    if(res.boundaries && res.boundaries.length){
+      const rd = document.createElement('div'); rd.className = 'bndRules';
+      res.boundaries.forEach(r => { const sp = document.createElement('span'); sp.textContent = r; rd.appendChild(sp); });
+      stage.appendChild(rd);
+    }
+    controls.style.display = 'flex';
+  }
+
+  /* ---------- 音频基础 ---------- */
+  const VOWEL_SET = new Set(['eɪ','aɪ','ɔɪ','əʊ','aʊ','ɪə','eə','ʊə','iː','uː','ɑː','ɔː','ɜː','æ','ɒ','ʌ','ə','ʊ','ɪ','e']);
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  async function playSyllable(i){
+    const res = current;
+    const cards = document.querySelectorAll('.syl');
+    const card = cards[i];
+    if(card) card.classList.add('playing');
+    const eng = getSelectedEngine();
+    let played = false;
+    try{
+      if(eng === 'lib'){
+        const f = await sisAudio(res.sylls[i].ipa, res.sylls[i].text);
+        if(f){ played = true; await playUrlOrFile(f); }
+      } else {
+        const url = eng === 'eleven' ? await elevenSpeakIPA(res.sylls[i].ipa.join(''), res.sylls[i].text)
+                  : eng === 'azure'  ? await azureSpeakIPA(res.sylls[i].ipa.join(''), res.sylls[i].text)
+                  : null;
+        if(url){
+          played = true;
+          await playUrlOrFile(url);
+        }
+      }
+    }catch(e){ toast('在线合成失败(' + String(e.message || e).slice(0, 60) + ')'); }
+    if(!played) toast('音节音频生成失败（需本机 SIS 服务在线）');
+    if(card) card.classList.remove('playing');
+  }
+
+  /* ---------- 在线语音 ---------- */
+  function playWordOnline(word){
+    /* 有道词典发音（英音），免密钥；<audio> 播放不受 CORS 限制 */
+    return new Promise((res, rej) => {
+      const a = new Audio('https://dict.youdao.com/dictvoice?audio=' + encodeURIComponent(word) + '&type=1');
+      a.onended = res; a.onerror = rej;
+      a.play().catch(rej);
+    });
+  }
+  function speakTTS(word){
+    if(!('speechSynthesis' in window)){ toast('当前浏览器不支持语音朗读'); return; }
+    try{
+      const u = new SpeechSynthesisUtterance(word);
+      u.lang = 'en-GB'; u.rate = 0.8;
+      const vs = speechSynthesis.getVoices();
+      const v = vs.find(v => /en[-_]GB/i.test(v.lang)) || vs.find(v => /^en/i.test(v.lang));
+      if(v) u.voice = v;
+      speechSynthesis.cancel();
+      speechSynthesis.speak(u);
+    }catch(e){ toast('朗读失败'); }
+  }
+
+  /* ---------- 在线语音引擎（ElevenLabs / Azure）与本地音节库 ---------- */
+  const onlineCache = new Map();
+  function readCfg(name){
+    try{ return JSON.parse(localStorage.getItem(name) || 'null'); }catch(e){ return null; }
+  }
+  function getEngineCfg(engine){
+    if(engine === 'eleven'){
+      const c = readCfg('sylEleven');
+      return (c && c.key) ? Object.assign({voice:'JBFqnCBsd6RMkjVDRZzb'}, c) : null;
+    }
+    if(engine === 'azure'){
+      const c = readCfg('sylAzure');
+      return (c && c.key && c.region) ? c : null;
+    }
+    return null;
+  }
+  function getSelectedEngine(){
+    const eng = localStorage.getItem('sylEngine') || 'lib';
+    if(eng === 'lib' || eng === 'local') return 'lib';   /* 'local' 为旧版本残留，一律归并到音节库 */
+    return getEngineCfg(eng) ? eng : 'lib';
+  }
+
+  /* ---- IPA 音标 → ARPAbet（华为云/音节库文件名用） ---- */
+  const ARPA = {'b':'B','d':'D','f':'F','g':'G','h':'HH','j':'Y','k':'K','l':'L','m':'M','n':'N','p':'P','r':'R','s':'S','t':'T','v':'V','w':'W','z':'Z',
+    'θ':'TH','ð':'DH','ʃ':'SH','ʒ':'ZH','tʃ':'CH','dʒ':'JH','ŋ':'NG',
+    'æ':'AE','ɒ':'AA','ʌ':'AH','ə':'AH','ɜː':'ER','ɪ':'IH','e':'EH','ɑː':'AA','ɔː':'AO','ʊ':'UH','uː':'UW','iː':'IY',
+    'eɪ':'EY','aɪ':'AY','ɔɪ':'OY','əʊ':'OW','aʊ':'AW'};
+  const ARPA_SPLIT = {'ɪə':['IH','R'], 'eə':['EH','R'], 'ʊə':['UH','R']};   // 双音素
+  function toArpabet(phonemes){
+    const out = [];
+    for(const p of phonemes){
+      if(ARPA_SPLIT[p]){ out.push(ARPA_SPLIT[p][0] + '1', ARPA_SPLIT[p][1]); }
+      else if(ARPA[p] !== undefined){
+        out.push(VOWEL_SET.has(p) ? ARPA[p] + (p === 'ə' ? '0' : '1') : ARPA[p]);
+      }
+    }
+    return out.join(' ');
+  }
+  function libFileOf(phonemes){
+    return 'assets/syllables/' + toArpabet(phonemes).replace(/\s+/g, '_') + '.mp3';
+  }
+  /* SIS 音节/音素音频：本地音节库优先 → 缺失时走本机代理实时合成（server.js，自动落盘缓存） */
+  async function sisAudio(phonemes, text, file){
+    file = file || libFileOf(phonemes);
+    const ck = 'L|' + file;
+    if(onlineCache.has(ck)) return onlineCache.get(ck);
+    let ok = false;
+    try{ const r = await fetch(file, {method: 'HEAD'}); ok = r.ok; }catch(e){ ok = false; }
+    if(ok){ const val = 'file:' + file; onlineCache.set(ck, val); return val; }
+    try{
+      const r = await fetch('api/tts', {method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({arpa: toArpabet(phonemes), text: text || '', file: file.split('/').pop()})});
+      if(r.ok){
+        const url = URL.createObjectURL(await r.blob());
+        onlineCache.set(ck, url);
+        return url;
+      }
+    }catch(e){}
+    return null;
+  }
+  async function playPhoneme(ph, el){
+    if(el) el.classList.add('hot');
+    try{
+      const f = await sisAudio([ph], ph, 'assets/syllables/PH_' + toArpabet([ph]) + '.mp3');
+      if(f) await playUrlOrFile(f);
+      else toast('音素音频不可用（需本机 SIS 服务在线）');
+    }finally{ if(el) el.classList.remove('hot'); }
+  }
+  async function playUrlOrFile(target, phonemes){
+    if(typeof target === 'string' && target.startsWith('file:')){
+      await new Promise(r2 => {
+        const a = new Audio(target.slice(5));
+        a.onended = r2; a.onerror = r2;
+        a.play().catch(r2);
+      });
+    } else {
+      await new Promise(r2 => {
+        const a = new Audio(target);
+        a.onended = r2; a.onerror = r2;
+        a.play().catch(r2);
+      });
+    }
+  }
+  async function elevenSpeakIPA(ipa, sylText){
+    const cfg = getEngineCfg('eleven');
+    if(!cfg) return null;
+    const clean = ipa.replace(/[ˈˌ.]/g, '');
+    const ck = 'e|' + cfg.voice + '|' + clean;
+    if(onlineCache.has(ck)) return onlineCache.get(ck);
+    const ssml = '<speak><phoneme alphabet="ipa" ph="' + clean + '">' + (sylText || 'bee') + '</phoneme></speak>';
+    const r = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + cfg.voice + '?output_format=mp3_44100_128', {
+      method: 'POST',
+      headers: { 'xi-api-key': cfg.key, 'Content-Type': 'application/json', 'Accept': 'audio/mpeg' },
+      body: JSON.stringify({ text: ssml, model_id: 'eleven_flash_v2_5' })
+    });
+    if(!r.ok){ const t = await r.text(); throw new Error('ElevenLabs ' + r.status + ' ' + t.slice(0, 60)); }
+    const ct = r.headers.get('content-type') || '';
+    if(ct.includes('json')) throw new Error('ElevenLabs 返回错误');
+    const buf = await r.arrayBuffer();
+    const url = URL.createObjectURL(new Blob([buf], {type: 'audio/mpeg'}));
+    onlineCache.set(ck, url);
+    return url;
+  }
+
+  async function azureSpeakIPA(ipa, sylText){
+    const cfg = getEngineCfg('azure');
+    if(!cfg) return null;
+    const clean = ipa.replace(/[ˈˌ.]/g, '');
+    const ck = 'a|' + cfg.region + '|' + clean;
+    if(onlineCache.has(ck)) return onlineCache.get(ck);
+    const ssml = '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-GB">' +
+      '<voice name="en-GB-RyanNeural"><phoneme alphabet="ipa" ph="' + clean + '">' + (sylText || 'bee') + '</phoneme></voice></speak>';
+    const r = await fetch('https://' + cfg.region + '.tts.speech.microsoft.com/cognitiveservices/v1', {
+      method: 'POST',
+      headers: {
+        'Ocp-Apim-Subscription-Key': cfg.key,
+        'Content-Type': 'application/ssml+xml',
+        'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3'
+      },
+      body: ssml
+    });
+    if(!r.ok) throw new Error('Azure ' + r.status);
+    const buf = await r.arrayBuffer();
+    const url = URL.createObjectURL(new Blob([buf], {type: 'audio/mpeg'}));
+    onlineCache.set(ck, url);
+    return url;
+  }
+
+  /* ---------- 设置面板 ---------- */
+  const modal = document.getElementById('settingsModal');
+  function openSettings(){
+    const eng = getSelectedEngine();
+    document.querySelector('input[name=ttsengine][value=' + eng + ']').checked = true;
+    const ec = readCfg('sylEleven') || {}, ac = readCfg('sylAzure') || {};
+    document.getElementById('elKey').value = ec.key || '';
+    document.getElementById('elVoice').value = ec.voice || 'JBFqnCBsd6RMkjVDRZzb';
+    document.getElementById('azureRegion').value = ac.region || '';
+    document.getElementById('azureKey').value = ac.key || '';
+    syncFieldVis();
+    modal.style.display = 'flex';
+  }
+  function syncFieldVis(){
+    const eng = document.querySelector('input[name=ttsengine]:checked').value;
+    document.getElementById('elevenFields').style.display = eng === 'eleven' ? 'block' : 'none';
+    document.getElementById('libFields').style.display = eng === 'lib' ? 'block' : 'none';
+    document.getElementById('azureFields').style.display = eng === 'azure' ? 'block' : 'none';
+  }
+  document.querySelectorAll('input[name=ttsengine]').forEach(r => { r.onchange = syncFieldVis; });
+  document.getElementById('btnSaveSettings').onclick = () => {
+    const eng = document.querySelector('input[name=ttsengine]:checked').value;
+    if(eng === 'eleven'){
+      const key = document.getElementById('elKey').value.trim();
+      const voice = document.getElementById('elVoice').value;
+      if(!key){ toast('请填写 API Key'); return; }
+      localStorage.setItem('sylEleven', JSON.stringify({key, voice}));
+    } else if(eng === 'azure'){
+      const region = document.getElementById('azureRegion').value.trim();
+      const key = document.getElementById('azureKey').value.trim();
+      if(!region || !key){ toast('请填写区域和密钥'); return; }
+      localStorage.setItem('sylAzure', JSON.stringify({region, key}));
+    }
+    localStorage.setItem('sylEngine', eng);
+    modal.style.display = 'none';
+    toast('已启用' + ({eleven:'ElevenLabs', lib:'SIS 音节库（本地+在线补齐）', azure:'Azure'}[eng] || eng) + '音节合成');
+  };
+  document.getElementById('btnCloseSettings').onclick = () => { modal.style.display = 'none'; };
+  modal.onclick = (e) => { if(e.target === modal) modal.style.display = 'none'; };
+
+  /* ---------- 事件 ---------- */
+  function showWord(){
+    const res = analyze(input.value);
+    if(!res){ toast('请输入英文字母组成的单词'); return; }
+    current = res; divided = false;
+    controls.style.display = 'none';
+    renderWhole(res);
+  }
+  $('btnShow').onclick = showWord;
+  input.addEventListener('keydown', e => { if(e.key === 'Enter') showWord(); });
+
+  $('btnPlayAll').onclick = async () => {
+    if(!current || !divided) return;
+    const my = ++playingToken;
+    for(let i = 0; i < current.sylls.length; i++){
+      if(my !== playingToken) return;
+      await playSyllable(i);
+      await sleep(220);
+    }
+  };
+  $('btnTTS').onclick = async () => {
+    if(!current) return;
+    try{ await playWordOnline(current.word); }     /* 有道在线，失败回退系统TTS */
+    catch(e){ speakTTS(current.word); }
+  };
+  $('btnSettings').onclick = openSettings;
+  $('btnReset').onclick = () => {
+    current = null; divided = false; controls.style.display = 'none';
+    stage.innerHTML = '<div class="hint">输入单词后按「显示」，再点击单词自动划分音节</div>';
+    input.value = ''; input.focus();
+  };
+})();
+</script>
+</body>
+</html>
