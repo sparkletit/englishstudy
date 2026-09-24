@@ -76,6 +76,16 @@
   .meta{color:var(--muted); font-size:14px; word-break:break-all;}
   .meta b{color:var(--ink);}
 
+  .sents{background:var(--card); border-radius:16px; padding:14px 18px; margin-top:14px;
+    box-shadow:0 4px 16px rgba(30,60,110,.06); font-size:15px; text-align:left;}
+  .sents .defs{color:#334155; line-height:1.8; padding-bottom:8px; border-bottom:1px dashed var(--line);}
+  .sents .defs:empty{display:none;}
+  .sents .sent{padding:8px 0; border-bottom:1px dashed var(--line);}
+  .sents .sent:last-child{border-bottom:none; padding-bottom:2px;}
+  .sent .en{color:var(--ink); line-height:1.55;}
+  .sent .en b{color:var(--red);}
+  .sent .zh{color:var(--muted); font-size:13px; margin-top:2px; line-height:1.5;}
+
   .controls{display:flex; gap:10px; justify-content:center; margin-top:16px; flex-wrap:wrap;}
   .controls button{
     font-size:15px; padding:10px 16px; border-radius:12px; border:none;

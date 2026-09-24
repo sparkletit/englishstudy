@@ -1,7 +1,7 @@
 'use client';
 
-/* 主页面：输入单词 → 元音标红展示 → 点击划分音节 → 音节/音标点读（SIS） */
-import { useEffect, useRef, useState } from 'react';
+/* 主页面：输入单词 → 元音标红展示 → 点击划分音节 → 音节/音标点读（华为云 SIS）→ 整词朗读（有道） */
+import { useRef, useState } from 'react';
 import { analyze, markTypes } from '@/lib/engine';
 
 const SAMPLES = ['student','banana','beautiful','computer','apple','little','teacher','elephant','station','water'];
@@ -24,27 +24,6 @@ function toArpabet(phonemes){
   return out.join(' ');
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-/* ---- 引擎配置（localStorage） ---- */
-function readCfg(name){
-  try{ return JSON.parse(localStorage.getItem(name) || 'null'); }catch(e){ return null; }
-}
-function getEngineCfg(engine){
-  if(engine === 'eleven'){
-    const c = readCfg('sylEleven');
-    return (c && c.key) ? Object.assign({voice:'JBFqnCBsd6RMkjVDRZzb'}, c) : null;
-  }
-  if(engine === 'azure'){
-    const c = readCfg('sylAzure');
-    return (c && c.key && c.region) ? c : null;
-  }
-  return null;
-}
-function getSelectedEngine(){
-  const eng = localStorage.getItem('sylEngine') || 'lib';
-  if(eng === 'lib' || eng === 'local') return 'lib';
-  return getEngineCfg(eng) ? eng : 'lib';
-}
 
 /* ---- 字母着色：v(红) / silent(灰) / ''(黑) ---- */
 function letterClasses(res, syl){
@@ -88,7 +67,7 @@ export default function Home(){
   const [playingIdx, setPlayingIdx] = useState(-1); /* 播放中的音节卡 */
   const [hotPh, setHotPh] = useState(null);         /* 播放中的音标 key */
   const [toastMsg, setToastMsg] = useState(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sents, setSents] = useState(null);         /* 释义+例句（有道） */
 
   const onlineCache = useRef(new Map());            /* 音频 URL 缓存 */
   const playingToken = useRef(0);
@@ -101,7 +80,7 @@ export default function Home(){
     toastTm.current = setTimeout(() => setToastMsg(null), 1800);
   }
 
-  /* ---------- 播放 ---------- */
+  /* ---------- 播放（全部走华为云 SIS：本地库优先，缺失走 /api/tts 实时合成并落盘） ---------- */
   function playUrl(url){
     return new Promise(r2 => {
       const a = new Audio(url);
@@ -109,7 +88,6 @@ export default function Home(){
       a.play().catch(r2);
     });
   }
-  /* SIS 音节/音素音频：public/syllables 静态文件优先 → 缺失时 /api/tts 实时合成（服务端落盘缓存） */
   async function sisAudio(phonemes, text, file){
     file = file || '/syllables/' + toArpabet(phonemes).replace(/\s+/g, '_') + '.mp3';
     const ck = 'L|' + file;
@@ -128,67 +106,14 @@ export default function Home(){
     }catch(e){}
     return null;
   }
-  async function elevenSpeakIPA(ipa, sylText){
-    const cfg = getEngineCfg('eleven');
-    if(!cfg) return null;
-    const clean = ipa.replace(/[ˈˌ.]/g, '');
-    const ck = 'e|' + cfg.voice + '|' + clean;
-    if(onlineCache.current.has(ck)) return onlineCache.current.get(ck);
-    const ssml = '<speak><phoneme alphabet="ipa" ph="' + clean + '">' + (sylText || 'bee') + '</phoneme></speak>';
-    const r = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + cfg.voice + '?output_format=mp3_44100_128', {
-      method: 'POST',
-      headers: { 'xi-api-key': cfg.key, 'Content-Type': 'application/json', 'Accept': 'audio/mpeg' },
-      body: JSON.stringify({ text: ssml, model_id: 'eleven_flash_v2_5' })
-    });
-    if(!r.ok){ const t = await r.text(); throw new Error('ElevenLabs ' + r.status + ' ' + t.slice(0, 60)); }
-    const ct = r.headers.get('content-type') || '';
-    if(ct.includes('json')) throw new Error('ElevenLabs 返回错误');
-    const buf = await r.arrayBuffer();
-    const url = URL.createObjectURL(new Blob([buf], {type: 'audio/mpeg'}));
-    onlineCache.current.set(ck, url);
-    return url;
-  }
-  async function azureSpeakIPA(ipa, sylText){
-    const cfg = getEngineCfg('azure');
-    if(!cfg) return null;
-    const clean = ipa.replace(/[ˈˌ.]/g, '');
-    const ck = 'a|' + cfg.region + '|' + clean;
-    if(onlineCache.current.has(ck)) return onlineCache.current.get(ck);
-    const ssml = '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-GB">' +
-      '<voice name="en-GB-RyanNeural"><phoneme alphabet="ipa" ph="' + clean + '">' + (sylText || 'bee') + '</phoneme></voice></speak>';
-    const r = await fetch('https://' + cfg.region + '.tts.speech.microsoft.com/cognitiveservices/v1', {
-      method: 'POST',
-      headers: {
-        'Ocp-Apim-Subscription-Key': cfg.key,
-        'Content-Type': 'application/ssml+xml',
-        'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3'
-      },
-      body: ssml
-    });
-    if(!r.ok) throw new Error('Azure ' + r.status);
-    const buf = await r.arrayBuffer();
-    const url = URL.createObjectURL(new Blob([buf], {type: 'audio/mpeg'}));
-    onlineCache.current.set(ck, url);
-    return url;
-  }
 
   async function playSyllable(i){
     const res = current;
     if(!res) return;
     setPlayingIdx(i);
-    const eng = getSelectedEngine();
     let played = false;
-    try{
-      if(eng === 'lib'){
-        const f = await sisAudio(res.sylls[i].ipa, res.sylls[i].text);
-        if(f){ played = true; await playUrl(f); }
-      } else {
-        const url = eng === 'eleven' ? await elevenSpeakIPA(res.sylls[i].ipa.join(''), res.sylls[i].text)
-                  : eng === 'azure'  ? await azureSpeakIPA(res.sylls[i].ipa.join(''), res.sylls[i].text)
-                  : null;
-        if(url){ played = true; await playUrl(url); }
-      }
-    }catch(e){ toast('在线合成失败(' + String(e.message || e).slice(0, 60) + ')'); }
+    const f = await sisAudio(res.sylls[i].ipa, res.sylls[i].text);
+    if(f){ played = true; await playUrl(f); }
     if(!played) toast('音节音频生成失败（SIS 服务不可用）');
     setPlayingIdx(-1);
   }
@@ -201,7 +126,7 @@ export default function Home(){
     }finally{ setHotPh(null); }
   }
 
-  /* 整词朗读：有道在线，失败回退系统 TTS */
+  /* 整词朗读：有道在线（保留），失败回退系统 TTS */
   function playWordOnline(w){
     return new Promise((res, rej) => {
       const a = new Audio('https://dict.youdao.com/dictvoice?audio=' + encodeURIComponent(w) + '&type=1');
@@ -222,11 +147,23 @@ export default function Home(){
     }catch(e){ toast('朗读失败'); }
   }
 
+  /* ---------- 释义与例句（/api/sentences → 有道） ---------- */
+  async function loadSents(w){
+    setSents(null);
+    try{
+      const r = await fetch('/api/sentences?word=' + encodeURIComponent(w));
+      if(!r.ok) return;
+      const d = await r.json();
+      if(d && (d.explains?.length || d.sentences?.length)) setSents(d);
+    }catch(e){ /* 静默失败，仅不展示 */ }
+  }
+
   /* ---------- 事件 ---------- */
   function showWord(){
     const res = analyze(word);
     if(!res){ toast('请输入英文字母组成的单词'); return; }
     setCurrent(res); setDivided(false);
+    loadSents(res.word);
   }
   async function playAll(){
     if(!current || !divided) return;
@@ -238,7 +175,7 @@ export default function Home(){
     }
   }
   function reset(){
-    setCurrent(null); setDivided(false);
+    setCurrent(null); setDivided(false); setSents(null);
     setWord('');
     inputRef.current && inputRef.current.focus();
   }
@@ -343,11 +280,28 @@ export default function Home(){
                    : <div className="hint">输入单词后按「显示」，再点击单词自动划分音节</div>}
         </div>
 
+        {current && sents && (
+          <div className="sents">
+            {sents.explains.length > 0 && (
+              <div className="defs">
+                {sents.explains.map((e, i) => <div key={i}>{e}</div>)}
+              </div>
+            )}
+            {sents.sentences.map((s, i) => (
+              <div className="sent" key={i}>
+                <div className="en">
+                  {s.parts.map((p, k) => p.hl ? <b key={k}>{p.t}</b> : <span key={k}>{p.t}</span>)}
+                </div>
+                <div className="zh">{s.zh}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {current && (
           <div className="controls" style={{display: 'flex'}}>
             <button onClick={playAll}>🔊 逐音节播放</button>
             <button className="sec" onClick={() => { if(!current) return; playWordOnline(current.word).catch(() => speakTTS(current.word)); }}>🔊 整词朗读</button>
-            <button className="sec" onClick={() => setSettingsOpen(true)}>⚙ 语音设置</button>
             <button className="sec" onClick={reset}>↺ 重新输入</button>
           </div>
         )}
@@ -371,95 +325,6 @@ export default function Home(){
       </div>
 
       <div className={'toast' + (toastMsg ? ' show' : '')}>{toastMsg}</div>
-
-      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} toast={toast} />}
     </>
-  );
-}
-
-/* ---------- 语音设置弹窗 ---------- */
-function SettingsModal({ onClose, toast }){
-  const [eng, setEng] = useState('lib');
-  const [elKey, setElKey] = useState('');
-  const [elVoice, setElVoice] = useState('JBFqnCBsd6RMkjVDRZzb');
-  const [azRegion, setAzRegion] = useState('');
-  const [azKey, setAzKey] = useState('');
-
-  useEffect(() => {
-    setEng(getSelectedEngine());
-    const ec = readCfg('sylEleven') || {}, ac = readCfg('sylAzure') || {};
-    setElKey(ec.key || '');
-    setElVoice(ec.voice || 'JBFqnCBsd6RMkjVDRZzb');
-    setAzRegion(ac.region || '');
-    setAzKey(ac.key || '');
-  }, []);
-
-  function save(){
-    if(eng === 'eleven'){
-      if(!elKey.trim()){ toast('请填写 API Key'); return; }
-      localStorage.setItem('sylEleven', JSON.stringify({key: elKey.trim(), voice: elVoice}));
-    } else if(eng === 'azure'){
-      if(!azRegion.trim() || !azKey.trim()){ toast('请填写区域和密钥'); return; }
-      localStorage.setItem('sylAzure', JSON.stringify({region: azRegion.trim(), key: azKey.trim()}));
-    }
-    localStorage.setItem('sylEngine', eng);
-    onClose();
-    toast('已启用' + ({eleven: 'ElevenLabs', lib: 'SIS 音节库（本地+在线补齐）', azure: 'Azure'}[eng] || eng) + '音节合成');
-  }
-
-  return (
-    <div className="modal" style={{display: 'flex'}} onClick={e => { if(e.target === e.currentTarget) onClose(); }}>
-      <div className="modal-card">
-        <h3>⚙ 语音设置</h3>
-        <label className="opt">
-          <input type="radio" name="ttsengine" value="eleven" checked={eng === 'eleven'} onChange={() => setEng('eleven')}/>
-          {' '}ElevenLabs 音标合成（邮箱注册免卡，浏览器直连）
-        </label>
-        {eng === 'eleven' && (
-          <div>
-            <input type="text" placeholder="API Key（个人资料页复制）" autoComplete="off" value={elKey} onChange={e => setElKey(e.target.value)}/>
-            <select
-              style={{width: '100%', fontSize: 15, padding: '9px 12px', margin: '6px 0', border: '2px solid var(--line)', borderRadius: 10, boxSizing: 'border-box'}}
-              value={elVoice} onChange={e => setElVoice(e.target.value)}
-            >
-              <option value="pNInz6obpgDQGcFmaJgB">Adam（美音·男）</option>
-              <option value="21m00Tcm4TlvDq8ikWAM">Rachel（美音·女）</option>
-              <option value="JBFqnCBsd6RMkjVDRZzb">George（英音·男）</option>
-              <option value="XB0fDUnXU5powFXDhCwa">Charlotte（英音·女）</option>
-            </select>
-            <p className="tip">注册：elevenlabs.io 邮箱注册（免费，无需信用卡）→ 右上角头像 → Profile + API key → 复制 Key。支持 IPA 音标合成。注意免费层每月约 1 万字符且 SSML 标记计入（约 150 个新音节/月，本应用会缓存）；付费 $5/月起近乎不限。</p>
-          </div>
-        )}
-        <label className="opt">
-          <input type="radio" name="ttsengine" value="lib" checked={eng === 'lib'} onChange={() => setEng('lib')}/>
-          {' '}本地音节库（public/syllables/，SIS 标准发音，已生成 352 个音节 + 44 个音素）
-        </label>
-        {eng === 'lib' && (
-          <div>
-            <p className="tip">
-              已用华为云 SIS 为词表内 352 个音节批量生成标准读音（音色：Alvin 英文男声，音量 80），保存在 public/syllables/，点音节直接播本地文件。
-              遇到库里没有的音节（如生词），会自动通过本应用的 <b>/api/tts</b> 接口实时调 SIS 合成并缓存，之后同样秒播。
-              要批量补充新词，运行 <b>npm run gen -- --ak AK --sk SK --pid 项目ID</b>（详见 tools/gen-syllables.js 顶部注释）。
-              密钥配置在 <b>sis-config.json</b>（服务端文件，不会下发到浏览器）。
-            </p>
-          </div>
-        )}
-        <label className="opt">
-          <input type="radio" name="ttsengine" value="azure" checked={eng === 'azure'} onChange={() => setEng('azure')}/>
-          {' '}Azure 智能语音（按音标合成，音质最好，需信用卡注册）
-        </label>
-        {eng === 'azure' && (
-          <div>
-            <input type="text" placeholder="区域 Region，如 eastasia" value={azRegion} onChange={e => setAzRegion(e.target.value)}/>
-            <input type="text" placeholder="语音服务密钥 Key" value={azKey} onChange={e => setAzKey(e.target.value)}/>
-            <p className="tip">在 azure.microsoft.com 免费注册「语音服务」(F0 免费层每月 50 万字符)，创建资源时选择区域（如 eastasia / southeastasia / eastus），在「密钥和终结点」页复制 Key。</p>
-          </div>
-        )}
-        <div className="modal-btns">
-          <button className="sec" onClick={onClose}>取消</button>
-          <button className="pri" onClick={save}>保存</button>
-        </div>
-      </div>
-    </div>
   );
 }

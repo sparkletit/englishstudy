@@ -1,4 +1,4 @@
-/* POST /api/tts —— SIS 实时合成代理（浏览器同源调用，绕开华为云 CORS 限制）
+/* POST /api/tts —— 华为云 SIS 实时合成代理（浏览器同源调用，绕开 CORS 限制）
    body: {"arpa":"K AA1 M","text":"com","file":"K_AA1_M.mp3"}
    返回 audio/mp3；结果落盘缓存到 public/syllables/<file>，下次直接静态秒播 */
 import fs from 'fs';
@@ -12,6 +12,7 @@ export async function POST(req){
   try{ body = await req.json(); }
   catch(e){ return Response.json({error: 'bad json'}, {status: 400}); }
   const { arpa, text, file } = body || {};
+
   if(!arpa || !/^[A-Za-z0-9 ]+$/.test(arpa))
     return Response.json({error: 'bad arpa'}, {status: 400});
 

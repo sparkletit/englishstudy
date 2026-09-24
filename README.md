@@ -25,9 +25,8 @@ npm run build && npm start   # 生产模式，同端口；手机用 http://电�
 
 ## 发音来源
 
-- **音节卡 / 单个音标**：优先播 `public/syllables/` 本地文件；缺失时经 `/api/tts` 实时调华为云 SIS 合成（音色 Alvin、音量 80，见 `sis-config.json`），响应自动落盘，之后秒播。
+- **音节卡 / 单个音标**：华为云 SIS 合成（音色 Alvin、音量 80）。优先播 `public/syllables/` 本地文件；缺失时经 `/api/tts` 实时合成并落盘缓存，之后秒播。
 - **整词朗读**：有道词典在线发音，失败回退系统 TTS。
-- 可选 ElevenLabs / Azure 引擎（⚙ 语音设置，浏览器直连）。
 
 ## 补充新词
 
