@@ -5,12 +5,21 @@
 import fs from 'fs';
 import path from 'path';
 import { loadSisConfig, sisTts } from '@/lib/sis';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 
 const SYL_DIR = path.join(process.cwd(), 'public', 'syllables');
 
+/* R2 绑定要用 getCloudflareContext().env 取（process.env 只有字符串型 vars） */
+function r2Bucket(){
+  try{
+    const ctx = getCloudflareContext({async: false});
+    return ctx && ctx.env ? ctx.env.SYL_CACHE : undefined;
+  }catch(e){ return undefined; }
+}
+
 /* 缓存读写：R2 优先（云端），失败回退磁盘（本机），再失败返回 null */
 async function cacheGet(name){
-  const r2 = process.env.SYL_CACHE;
+  const r2 = r2Bucket();
   if(r2 && r2.get){
     try{ const o = await r2.get('syllables/' + name); if(o) return new Uint8Array(await o.arrayBuffer()); }catch(e){}
     return null;
@@ -22,7 +31,7 @@ async function cacheGet(name){
   return null;
 }
 async function cachePut(name, bytes){
-  const r2 = process.env.SYL_CACHE;
+  const r2 = r2Bucket();
   if(r2 && r2.put){
     try{ await r2.put('syllables/' + name, bytes); }catch(e){}
     return;
