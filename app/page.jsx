@@ -1,7 +1,7 @@
 'use client';
 
 /* 主页面：输入单词 → 元音标红展示 → 点击划分音节 → 音节/音标点读（华为云 SIS）→ 整词朗读（有道） */
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { analyze, markTypes } from '@/lib/engine';
 
 const SAMPLES = ['student','banana','beautiful','computer','apple','little','teacher','elephant','station','water'];
@@ -68,6 +68,7 @@ export default function Home(){
   const [hotPh, setHotPh] = useState(null);         /* 播放中的音标 key */
   const [toastMsg, setToastMsg] = useState(null);
   const [sents, setSents] = useState(null);         /* 释义+例句（有道） */
+  const [history, setHistory] = useState([]);       /* 最近查询词 */
 
   const onlineCache = useRef(new Map());            /* 音频 URL 缓存 */
   const playingToken = useRef(0);
@@ -147,6 +148,22 @@ export default function Home(){
     }catch(e){ toast('朗读失败'); }
   }
 
+  /* ---------- 最近查询（localStorage 持久化） ---------- */
+  useEffect(() => {
+    try{ setHistory(JSON.parse(localStorage.getItem('sylHistory') || '[]').filter(w => /^[a-z]+$/i.test(w))); }catch(e){}
+  }, []);
+  function addHistory(w){
+    setHistory(prev => {
+      const next = [w, ...prev.filter(x => x !== w)].slice(0, 12);
+      try{ localStorage.setItem('sylHistory', JSON.stringify(next)); }catch(e){}
+      return next;
+    });
+  }
+  function clearHistory(){
+    setHistory([]);
+    try{ localStorage.removeItem('sylHistory'); }catch(e){}
+  }
+
   /* ---------- 释义与例句（/api/sentences → 有道） ---------- */
   async function loadSents(w){
     setSents(null);
@@ -159,11 +176,13 @@ export default function Home(){
   }
 
   /* ---------- 事件 ---------- */
-  function showWord(){
-    const res = analyze(word);
+  function showWord(w){
+    const q = typeof w === 'string' ? w : word;   /* 词签点击直接传词，避免闭包过期 */
+    const res = analyze(q);
     if(!res){ toast('请输入英文字母组成的单词'); return; }
     setCurrent(res); setDivided(false);
     loadSents(res.word);
+    addHistory(res.word);
   }
   async function playAll(){
     if(!current || !divided) return;
@@ -269,9 +288,18 @@ export default function Home(){
           />
           <button onClick={showWord}>显示</button>
         </div>
+        {history.length > 0 && (
+          <div className="samples hist">
+            <span className="hlabel">🕘 最近</span>
+            {history.map(w => (
+              <button key={w} onClick={() => { setWord(w); showWord(w); }}>{w}</button>
+            ))}
+            <button className="hclear" onClick={clearHistory}>清空</button>
+          </div>
+        )}
         <div className="samples">
           {SAMPLES.map(w => (
-            <button key={w} onClick={() => { setWord(w); setTimeout(showWord, 0); }}>{w}</button>
+            <button key={w} onClick={() => { setWord(w); showWord(w); }}>{w}</button>
           ))}
         </div>
 
