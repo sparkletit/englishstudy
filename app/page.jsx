@@ -3,6 +3,7 @@
 /* 主页面：输入单词 → 元音标红展示 → 点击划分音节 → 音节/音标点读（华为云 SIS）→ 整词朗读（有道） */
 import { useEffect, useRef, useState } from 'react';
 import { analyze, markTypes } from '@/lib/engine';
+import { playAudioUrl } from '@/lib/clientAudio';
 
 /* ---- IPA → ARPAbet（SIS 合成与音节库文件名用） ---- */
 const VOWEL_SET = new Set(['eɪ','aɪ','ɔɪ','əʊ','aʊ','ɪə','eə','ʊə','iː','uː','ɑː','ɔː','ɜː','æ','ɒ','ʌ','ə','ʊ','ɪ','e']);
@@ -80,13 +81,6 @@ export default function Home(){
   }
 
   /* ---------- 播放（全部走华为云 SIS：本地库优先，缺失走 /api/tts 实时合成并落盘） ---------- */
-  function playUrl(url){
-    return new Promise(r2 => {
-      const a = new Audio(url);
-      a.onended = r2; a.onerror = r2;
-      a.play().catch(r2);
-    });
-  }
   async function sisAudio(phonemes, text, file){
     file = file || '/syllables/' + toArpabet(phonemes).replace(/\s+/g, '_') + '.mp3';
     const ck = 'L|' + file;
@@ -112,7 +106,7 @@ export default function Home(){
     setPlayingIdx(i);
     let played = false;
     const f = await sisAudio(res.sylls[i].ipa, res.sylls[i].text);
-    if(f){ played = true; await playUrl(f); }
+    if(f){ played = true; await playAudioUrl(f); }
     if(!played) toast('音节音频生成失败（SIS 服务不可用）');
     setPlayingIdx(-1);
   }
@@ -120,7 +114,7 @@ export default function Home(){
     setHotPh(key);
     try{
       const f = await sisAudio([ph], ph, '/syllables/PH_' + toArpabet([ph]) + '.mp3');
-      if(f) await playUrl(f);
+      if(f) await playAudioUrl(f);
       else toast('音素音频不可用（SIS 服务不可用）');
     }finally{ setHotPh(null); }
   }
