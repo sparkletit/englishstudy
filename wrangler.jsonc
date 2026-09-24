@@ -24,14 +24,14 @@
 		// see https://opennext.js.org/cloudflare/howtos/image
 		"binding": "IMAGES"
 	},
-	// ===== 项目自定义绑定（部署前取消注释并填入，见 DEPLOY.md；本地 next build 需保持注释）=====
-	// Supabase PostgreSQL 连接（wrangler hyperdrive list 查 id）
-	// "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<hyperdrive-id>" }],
-	// 实时合成音频的 R2 缓存桶（wrangler r2 bucket create syl-cache）
-	// "r2_buckets": [{ "binding": "SYL_CACHE", "bucket_name": "syl-cache" }],
+	// ===== 项目自定义配置 =====
+	// Supabase REST 连接（URL 是 vars，密钥 SUPABASE_SERVICE_KEY 用 wrangler secret put 设置）
 	"vars": {
 		"SIS_REGION": "cn-east-3",
 		"SIS_VOICE": "english_alvin_common",
-		"SIS_VOLUME": "100"
-	}
+		"SIS_VOLUME": "100",
+		"SUPABASE_URL": "https://qjmnjsgbsscamfvuvscz.supabase.co"
+	},
+	// 实时合成音频的 R2 缓存桶（wrangler r2 bucket create syl-cache）
+	"r2_buckets": [{ "binding": "SYL_CACHE", "bucket_name": "syl-cache" }]
 }

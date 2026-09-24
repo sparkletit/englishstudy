@@ -1,17 +1,12 @@
 /* /api/units —— 单元管理
    GET  列出全部单元（含词数）
    POST 创建单元并批量入库单词 body: {name, text}（text 按非字母切分） */
-import { withClient, ensureSchema, dbErrorResponse } from '@/lib/db';
+import { ensureSchema, listUnits, createUnit, dbErrorResponse } from '@/lib/db';
 
 export async function GET(){
   try{
     await ensureSchema();
-    const rows = await withClient(c => c.query(
-      `SELECT u.id, u.name, u.created_at, COUNT(w.id)::int AS count
-       FROM units u LEFT JOIN words w ON w.unit_id = u.id
-       GROUP BY u.id ORDER BY u.created_at DESC`
-    ));
-    return Response.json(rows.rows);
+    return Response.json(await listUnits());
   }catch(e){ return dbErrorResponse(e); }
 }
 
@@ -25,30 +20,7 @@ export async function POST(req){
     )].slice(0, 500);
     if(!name) return Response.json({error: '请填写单元名称'}, {status: 400});
     if(!words.length) return Response.json({error: '未识别到有效单词（仅支持英文字母）'}, {status: 400});
-
-    const out = await withClient(async client => {
-      await client.query('BEGIN');
-      try{
-        const dup = await client.query('SELECT id FROM units WHERE name = $1', [name]);
-        if(dup.rows.length){
-          await client.query('ROLLBACK');
-          return {status: 409, body: {error: `单元「${name}」已存在，请换一个名称`}};
-        }
-        const u = await client.query('INSERT INTO units(name) VALUES($1) RETURNING id', [name]);
-        const uid = u.rows[0].id;
-        const values = [], params = [];
-        words.forEach((w, i) => {
-          values.push(`($${i * 2 + 1}, $${i * 2 + 2})`);
-          params.push(uid, w);
-        });
-        await client.query(`INSERT INTO words(unit_id, word) VALUES ${values.join(',')} ON CONFLICT DO NOTHING`, params);
-        await client.query('COMMIT');
-        return {status: 200, body: {ok: true, id: uid, name, added: words.length}};
-      }catch(e){
-        await client.query('ROLLBACK').catch(() => {});
-        throw e;
-      }
-    });
-    return Response.json(out.body, {status: out.status});
+    const out = await createUnit(name, words);
+    return Response.json(out);
   }catch(e){ return dbErrorResponse(e); }
 }

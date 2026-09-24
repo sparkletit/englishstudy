@@ -1,7 +1,7 @@
 /* /api/units/[id]
    GET    返回单元全部单词 {id, name, words:[...]}
    DELETE 删除单元（级联删词） */
-import { withClient, ensureSchema, dbErrorResponse } from '@/lib/db';
+import { ensureSchema, getUnit, deleteUnit, dbErrorResponse } from '@/lib/db';
 
 export async function GET(req, { params }){
   try{
@@ -9,13 +9,9 @@ export async function GET(req, { params }){
     const { id } = await params;
     const uid = parseInt(id, 10);
     if(!Number.isInteger(uid)) return Response.json({error: 'bad id'}, {status: 400});
-    const out = await withClient(async c => {
-      const u = await c.query('SELECT id, name FROM units WHERE id = $1', [uid]);
-      if(!u.rows.length) return {status: 404, body: {error: '单元不存在'}};
-      const w = await c.query('SELECT word FROM words WHERE unit_id = $1 ORDER BY id', [uid]);
-      return {status: 200, body: {id: uid, name: u.rows[0].name, words: w.rows.map(r => r.word)}};
-    });
-    return Response.json(out.body, {status: out.status});
+    const u = await getUnit(uid);
+    if(!u) return Response.json({error: '单元不存在'}, {status: 404});
+    return Response.json(u);
   }catch(e){ return dbErrorResponse(e); }
 }
 
@@ -25,7 +21,7 @@ export async function DELETE(req, { params }){
     const { id } = await params;
     const uid = parseInt(id, 10);
     if(!Number.isInteger(uid)) return Response.json({error: 'bad id'}, {status: 400});
-    await withClient(c => c.query('DELETE FROM units WHERE id = $1', [uid]));
+    await deleteUnit(uid);
     return Response.json({ok: true});
   }catch(e){ return dbErrorResponse(e); }
 }
