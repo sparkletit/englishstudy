@@ -1,7 +1,35 @@
-/* GET /api/sentences?word=beautiful —— 单词释义 + 双语例句（服务端转发有道词典，规避 CORS）
-   返回 {word, explains:[...], sentences:[{parts:[{t,hl}], zh}]}
+/* GET /api/sentences?word=beautiful —— 释义 + 双语例句 + 影视片段（服务端转发有道词典，规避 CORS）
+   返回 {word, explains:[...], sentences:[{parts:[{t,hl}], zh}], videos:[{video, cover, contributor, cues:[{start,end,parts}]}]}
    parts 中 hl:true 的片段为目标词（页面标红显示）；服务端内存缓存，重复查询不再次请求 */
 const cache = new Map();
+
+/* SRT 字幕 → [{start, end, parts}]，<font color=...> 标记转为高亮片段 */
+function parseSrt(srt){
+  const cues = [];
+  const ts = t => {
+    const m = String(t).match(/(\d+):(\d+):(\d+)[,.](\d+)/);
+    return m ? (+m[1]) * 3600 + (+m[2]) * 60 + (+m[3]) + (+m[4]) / 1000 : 0;
+  };
+  for(const block of String(srt || '').split(/\r?\n\s*\r?\n/)){
+    const lines = block.split(/\r?\n/).filter(Boolean);
+    const idx = lines.findIndex(l => l.includes('-->'));
+    if(idx < 0) continue;
+    const [a, z] = lines[idx].split('-->');
+    const text = lines.slice(idx + 1).join(' ');
+    const parts = [];
+    const re = /<font[^>]*>(.*?)<\/font>/g;
+    let last = 0, m;
+    while((m = re.exec(text))){
+      if(m.index > last) parts.push({t: text.slice(last, m.index).replace(/<[^>]+>/g, '')});
+      parts.push({t: m[1], hl: true});
+      last = re.lastIndex;
+    }
+    if(last < text.length) parts.push({t: text.slice(last).replace(/<[^>]+>/g, '')});
+    const cleaned = parts.map(p => ({t: p.hl ? p.t.trim() : p.t.replace(/\s+/g, ' '), hl: p.hl})).filter(p => p.t.trim());
+    if(cleaned.length) cues.push({start: ts(a), end: ts(z), parts: cleaned});
+  }
+  return cues;
+}
 
 export async function GET(req){
   const { searchParams } = new URL(req.url);
@@ -47,7 +75,18 @@ export async function GET(req){
       if(en && zh && en.length < 120) sentences.push({parts, zh});
     }
 
-    const data = {word, explains, sentences};
+    /* 影视片段：video_sents.sents_data（网易 CDN 的 MP4 + 封面 + 字幕） */
+    const videos = [];
+    ((j.video_sents && j.video_sents.sents_data) || []).slice(0, 3).forEach(v => {
+      if(v.video) videos.push({
+        video: v.video,
+        cover: v.video_cover || '',
+        contributor: v.contributor || '',
+        cues: parseSrt(v.subtitle_srt)
+      });
+    });
+
+    const data = {word, explains, sentences, videos};
     cache.set(word, data);
     return Response.json(data);
   }catch(e){

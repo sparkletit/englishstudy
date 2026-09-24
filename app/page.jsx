@@ -4,8 +4,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { analyze, markTypes } from '@/lib/engine';
 
-const SAMPLES = ['student','banana','beautiful','computer','apple','little','teacher','elephant','station','water'];
-
 /* ---- IPA → ARPAbet（SIS 合成与音节库文件名用） ---- */
 const VOWEL_SET = new Set(['eɪ','aɪ','ɔɪ','əʊ','aʊ','ɪə','eə','ʊə','iː','uː','ɑː','ɔː','ɜː','æ','ɒ','ʌ','ə','ʊ','ɪ','e']);
 const ARPA = {'b':'B','d':'D','f':'F','g':'G','h':'HH','j':'Y','k':'K','l':'L','m':'M','n':'N','p':'P','r':'R','s':'S','t':'T','v':'V','w':'W','z':'Z',
@@ -150,14 +148,13 @@ export default function Home(){
 
   /* ---------- 最近查询（localStorage 持久化） ---------- */
   useEffect(() => {
-    try{ setHistory(JSON.parse(localStorage.getItem('sylHistory') || '[]').filter(w => /^[a-z]+$/i.test(w))); }catch(e){}
+    try{ setHistory(JSON.parse(localStorage.getItem('sylHistory') || '[]').filter(w => /^[a-z]+$/i.test(w)).slice(0, 5)); }catch(e){}
   }, []);
   function addHistory(w){
     setHistory(prev => {
-      const next = [w, ...prev.filter(x => x !== w)].slice(0, 12);
+      const next = [w, ...prev.filter(x => x !== w)].slice(0, 5);
       try{ localStorage.setItem('sylHistory', JSON.stringify(next)); }catch(e){}
-      return next;
-    });
+      return next;    });
   }
   function clearHistory(){
     setHistory([]);
@@ -268,11 +265,10 @@ export default function Home(){
 
   return (
     <>
-      <div className="app">
-        <header>
-          <h1>📖 音节划分器</h1>
-          <p>输入单词 · 元音标红 · 点击划分 · 点音标听发音</p>
-        </header>
+      <header>
+        <h1>📖 音节划分器</h1>
+        <p>输入单词 · 元音标红 · 点击划分 · 点音标听发音</p>
+      </header>
 
         <div className="search">
           <input
@@ -297,11 +293,14 @@ export default function Home(){
             <button className="hclear" onClick={clearHistory}>清空</button>
           </div>
         )}
-        <div className="samples">
-          {SAMPLES.map(w => (
-            <button key={w} onClick={() => { setWord(w); showWord(w); }}>{w}</button>
-          ))}
-        </div>
+
+        {current && (
+          <div className="controls" style={{display: 'flex'}}>
+            <button onClick={playAll}>🔊 逐音节播放</button>
+            <button className="sec" onClick={() => { if(!current) return; playWordOnline(current.word).catch(() => speakTTS(current.word)); }}>🔊 整词朗读</button>
+            <button className="sec" onClick={reset}>↺ 重新输入</button>
+          </div>
+        )}
 
         <div className="stage">
           {current ? (divided ? renderDivided() : renderWhole())
@@ -326,11 +325,10 @@ export default function Home(){
           </div>
         )}
 
-        {current && (
-          <div className="controls" style={{display: 'flex'}}>
-            <button onClick={playAll}>🔊 逐音节播放</button>
-            <button className="sec" onClick={() => { if(!current) return; playWordOnline(current.word).catch(() => speakTTS(current.word)); }}>🔊 整词朗读</button>
-            <button className="sec" onClick={reset}>↺ 重新输入</button>
+        {current && sents && sents.videos?.length > 0 && (
+          <div className="vids">
+            <div className="vtitle">🎬 影视片段（点击播放，字幕跟读）</div>
+            {sents.videos.map((v, i) => <VideoClip key={i} v={v} />)}
           </div>
         )}
 
@@ -350,9 +348,40 @@ export default function Home(){
         <footer>元音 <span style={{color: 'var(--red)', fontWeight: 700}}>红色</span> · 灰色为不发音字母 · ˈ 重音符号<br/>
         点音节卡播放整个音节 · 点单个音标只听该音素<br/>
         音节/音素发音均为华为云 SIS 合成 · 整词朗读走有道在线发音</footer>
-      </div>
 
       <div className={'toast' + (toastMsg ? ' show' : '')}>{toastMsg}</div>
     </>
+  );
+}
+
+/* ---------- 影视片段：播放器 + 播放进度同步高亮的字幕 ---------- */
+function VideoClip({ v }){
+  const ref = useRef(null);
+  const [cur, setCur] = useState(-1);
+  return (
+    <div className="vclip">
+      <video
+        ref={ref}
+        src={v.video}
+        poster={v.cover}
+        controls
+        preload="metadata"
+        playsInline
+        onTimeUpdate={() => {
+          const t = ref.current.currentTime;
+          let idx = -1;
+          v.cues.forEach((c, k) => { if(t >= c.start && t <= c.end) idx = k; });
+          setCur(idx);
+        }}
+      />
+      <div className="vsub">
+        {v.cues.map((c, k) => (
+          <div key={k} className={'cue' + (k === cur ? ' on' : '')}>
+            {c.parts.map((p, m) => p.hl ? <b key={m}>{p.t}</b> : <span key={m}>{p.t}</span>)}
+          </div>
+        ))}
+      </div>
+      {v.contributor && <div className="vsrc">来源：{v.contributor}</div>}
+    </div>
   );
 }

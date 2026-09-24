@@ -1,8 +1,9 @@
 import './globals.css';
+import Nav from '@/components/Nav';
 
 export const metadata = {
   title: '英语音节划分器 · 音节点读',
-  description: '输入单词自动划分音节，音标点读，SIS 标准发音',
+  description: '输入单词自动划分音节，音标点读，SIS 标准发音，听写与拼写练习',
   appleWebApp: { capable: true }
 };
 
@@ -15,7 +16,12 @@ export const viewport = {
 export default function RootLayout({ children }){
   return (
     <html lang="zh-CN">
-      <body>{children}</body>
+      <body>
+        <div className="app">
+          <Nav />
+          {children}
+        </div>
+      </body>
     </html>
   );
 }

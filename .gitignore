@@ -1,7 +1,12 @@
 # 依赖与构建产物
 node_modules/
 .next/
+.open-next/
+.wrangler/
 out/
+
+# 本地密钥（wrangler secret 的本地版本，切勿提交）
+.dev.vars
 
 # 华为云密钥（服务端配置，切勿提交）
 sis-config.json

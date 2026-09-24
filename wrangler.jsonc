@@ -1,0 +1,37 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"main": ".open-next/worker.js",
+	"name": "syl-divider",
+	"compatibility_date": "2026-09-24",
+	"compatibility_flags": [
+		"nodejs_compat",
+		"global_fetch_strictly_public"
+	],
+	"assets": {
+		"directory": ".open-next/assets",
+		"binding": "ASSETS"
+	},
+	"services": [
+		{
+			// Self-reference service binding, the service name must match the worker name
+			// see https://opennext.js.org/cloudflare/caching
+			"binding": "WORKER_SELF_REFERENCE",
+			"service": "syl-divider"
+		}
+	],
+	"images": {
+		// Enable image optimization
+		// see https://opennext.js.org/cloudflare/howtos/image
+		"binding": "IMAGES"
+	},
+	// ===== 项目自定义绑定（部署时创建后取消注释，见 DEPLOY.md）=====
+	// Supabase PostgreSQL 连接（wrangler hyperdrive list 查 id）
+	// "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<hyperdrive-id>" }],
+	// 实时合成音频的 R2 缓存桶（wrangler r2 bucket create syl-cache）
+	// "r2_buckets": [{ "binding": "SYL_CACHE", "bucket_name": "syl-cache" }],
+	"vars": {
+		"SIS_REGION": "cn-east-3",
+		"SIS_VOICE": "english_alvin_common",
+		"SIS_VOLUME": "100"
+	}
+}
