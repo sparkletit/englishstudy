@@ -46,7 +46,7 @@ console.log(`解析完成：${groups.size} 个单元，${[...groups.values()].re
 for(const url of urls){
   console.log('\n=== 导入到 ' + url + ' ===');
   /* 先清空该环境现有单元 */
-  const olds = await fetch(url + '/api/units').then(r => r.json()).catch(() => []);
+  const olds = await fetch(url + '/api/units').then(r => r.json()).then(d => Array.isArray(d) ? d : []).catch(() => []);
   for(const u of olds){
     await fetch(url + '/api/units/' + u.id, {method: 'DELETE'});
   }
