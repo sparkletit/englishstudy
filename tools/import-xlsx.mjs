@@ -17,9 +17,11 @@ const urls = [];
 for(let i = 0; i < args.length; i++){ if(args[i] === '--url') urls.push(args[i + 1]); }
 const sheetIdx = args.indexOf('--sheet');
 const sheetName = sheetIdx >= 0 ? args[sheetIdx + 1] : '按Unit分类';
+const prefixIdx = args.indexOf('--prefix');
+const prefix = prefixIdx >= 0 ? (args[prefixIdx + 1] || '') : '';
 
 if(!file || !urls.length){
-  console.error('用法: node tools/import-xlsx.mjs 词表.xlsx --url http://127.0.0.1:8123 [--url https://...] [--sheet 表名]');
+  console.error('用法: node tools/import-xlsx.mjs 词表.xlsx --url http://127.0.0.1:8123 [--url https://...] [--sheet 表名] [--prefix 前缀]');
   process.exit(1);
 }
 
@@ -54,14 +56,15 @@ for(const url of urls){
 
   let done = 0;
   for(const [name, words] of groups){
+    const fullName = prefix + name;
     const r = await fetch(url + '/api/units', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({name, text: [...words].join(' ')})
+      body: JSON.stringify({name: fullName, text: [...words].join(' ')})
     });
     const j = await r.json().catch(() => ({}));
-    if(r.ok){ done++; console.log(`  ✓ ${name}（${j.added} 词）`); }
-    else console.log(`  ✗ ${name}: ${j.error || r.status}`);
+    if(r.ok){ done++; console.log(`  ✓ ${fullName}（${j.added} 词）`); }
+    else console.log(`  ✗ ${fullName}: ${j.error || r.status}`);
   }
   const list = await fetch(url + '/api/units').then(r => r.json()).catch(() => []);
   const total = list.reduce((s, u) => s + u.count, 0);
