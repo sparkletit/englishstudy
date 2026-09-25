@@ -6,7 +6,7 @@ export default function Nav(){
   const path = usePathname() || '/';
   const items = [
     ['/', '📖 查词'],
-    ['/import', '📥 导入'],
+    ['/import', '📁 词库'],
     ['/listen', '🎧 听写'],
     ['/spell', '✏️ 拼写'],
   ];
